@@ -180,6 +180,7 @@ afterEach(() => {
   try {
     cleanup()
   } finally {
+    globalThis.__DSH_DESKTOP_WORKBENCH__ = undefined
     delete document.documentElement.dataset.platform
     for (const restore of restoreProperties.splice(0).reverse()) restore()
     document.title = originalTitle
@@ -795,5 +796,21 @@ describe('sidebar drawer', () => {
     resize(767)
     expect(sidebarOwner().collapsed).toBe(true)
     expect(tracks(frame)).toEqual([0, 0])
+  })
+})
+
+describe('desktop workbench document', () => {
+  it('replaces the three columns with the workflow and code shell', () => {
+    globalThis.__DSH_DESKTOP_WORKBENCH__ = true
+    const { frame, queryByTestId, getByTestId } = mountFrame()
+    expect(frame.hasAttribute('data-workbench')).toBe(true)
+    expect(frame.style.gridTemplateColumns).toBe('')
+    expect(frame.querySelector('[data-workbench-shell]')).not.toBeNull()
+    expect(queryByTestId('sidebar-content')).toBeNull()
+    expect(queryByTestId('main-content')).toBeNull()
+    expect(queryByTestId('rightbar-content')).toBeNull()
+    expect(getByTestId('shell.bottom-content')).toBeTruthy()
+    expect(getByTestId('shell.overlay-content')).toBeTruthy()
+    expect(document.title).toBe('title')
   })
 })

@@ -7,6 +7,10 @@
  * the Conversation or a global panel. Each column occupant owns its Session
  * binding and reports the geometry it needs.
  *
+ * The desktop application document sets `__DSH_DESKTOP_WORKBENCH__`. That
+ * document renders the workbench shell instead of the three columns, so the
+ * workflow column and the code column stay visible together.
+ *
  * The right column is a track, not a box: its occupant draws its panel anchored
  * to the frame's right edge at the resolved normal width, and the
  * track only decides whether the centre makes room for it. The occupant reports
@@ -20,8 +24,10 @@ import type {
   HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { CENTER_MIN, clampWidth, computeColumns, RIGHTBAR_DEFAULT_RATIO, RIGHTBAR_MAX_RATIO, RIGHTBAR_MIN, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT, SIDEBAR_DRAWER_BREAKPOINT } from './columns.ts'
+import { isDesktopWorkbenchDocument } from './desktop-workbench.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
+import { WorkbenchShell } from './WorkbenchShell.tsx'
 import css from './AppFrame.module.css'
 
 /** Browser posture supplied by the root registration. */
@@ -34,7 +40,7 @@ export type AppFrameProps =
   & PropsRuntime<'root'>
   & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.bottom' | 'shell.overlay' | 'shell.leading'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
-  & PropsLocale<'common'>
+  & PropsLocale<'workbench'>
   & InjectFace<AppFrameInjected>
 
 /** Center column grid item (session-body building block). */
@@ -258,7 +264,8 @@ export function AppFrame({
   const onRightbarDrag = useCallback((dx: number) => {
     actions.setRightbar(rightbarBase.current - dx)
   }, [actions])
-  const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
+  const workbench = isDesktopWorkbenchDocument()
+  const productTitle = workbench ? t('title') : process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
   // The rendered template lets the grid solve the squeeze natively: the centre
   // declares its protected minimum and the right column bids up to the clamped
   // preference, so a window resize lands in the same layout pass as the frame
@@ -284,6 +291,25 @@ export function AppFrame({
   // AppFrame.module.css reserves clearance for the seat's rendered controls.
   const leading = useMemo(() => renderSlot('shell.leading', {}), [renderSlot])
   const leadingMounted = drawer || darwin && sidebarCollapsed
+
+  if (workbench) {
+    return (
+      <div ref={frameRef} className={css.frame} data-workbench="">
+        <DocumentTitle
+          productTitle={productTitle}
+          useSessions={useSessions}
+          usePanelInfo={usePanelInfo}
+        />
+        <WorkbenchShell t={t} />
+        <div className={css.bottomRow} data-shell-bottom>
+          {renderSlot('shell.bottom', {})}
+        </div>
+        <div className={css.overlayLayer} data-shell-overlay>
+          {overlays}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
