@@ -1,0 +1,24 @@
+/* Desktop workbench console palette. Scoped to the shell root so the Web
+   three-column theme is unchanged. Feature CSS keeps using alias tokens. */
+[data-dsh-workbench] {
+  color-scheme: dark;
+  --dsw-alias-bg-base: rgb(6, 10, 16);
+  --dsw-alias-bg-layer-1: rgb(9, 15, 23);
+  --dsw-alias-bg-layer-2: rgb(13, 21, 31);
+  --dsw-alias-bg-layer-3: rgb(17, 27, 39);
+  --dsw-alias-label-primary: rgb(214, 230, 236);
+  --dsw-alias-label-secondary: rgb(158, 182, 194);
+  --dsw-alias-label-tertiary: rgb(110, 132, 144);
+  --dsw-alias-label-on-color: rgb(4, 18, 20);
+  --dsw-alias-border-l2: rgb(61 214 196 / 20%);
+  --dsw-alias-border-l3: rgb(61 214 196 / 36%);
+  --dsw-specific-sidebar-fill: rgb(4, 8, 13);
+  --dsw-alias-brand-primary-new-colorprimary-new-color: rgb(61, 214, 196);
+  --dsw-alias-state-success-primary: rgb(61, 214, 196);
+  --dsw-alias-state-success-secondary: rgb(140, 232, 220);
+  --dsw-specific-input-major: rgb(7, 13, 20);
+  --dsw-alias-markdown-code-block: rgb(3, 7, 12);
+  --dsw-alias-markdown-code-block-banner: rgb(7, 13, 20);
+  --dsw-alias-interactive-bg-hover: rgb(61 214 196 / 12%);
+  --dsw-focus-ring-color: rgb(61, 214, 196);
+}

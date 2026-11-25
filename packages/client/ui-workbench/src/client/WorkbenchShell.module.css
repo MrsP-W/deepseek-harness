@@ -1,6 +1,7 @@
 .shell {
   --dsh-workbench-rail: 56px;
   --dsh-workbench-workflow: 1fr;
+  --dsh-hud-accent: var(--dsw-alias-brand-primary-new-colorprimary-new-color);
   position: relative;
   display: grid;
   grid-template-columns: var(--dsh-workbench-rail) var(--dsh-workbench-workflow) minmax(0, 1fr);
@@ -21,7 +22,9 @@
   align-items: center;
   gap: 8px;
   padding: 12px 0;
-  background: var(--dsw-specific-sidebar-fill);
+  background:
+    linear-gradient(to bottom, color-mix(in srgb, var(--dsh-hud-accent) 10%, transparent), transparent 72px),
+    var(--dsw-specific-sidebar-fill);
   border-right: 0.5px solid var(--dsw-alias-border-l3);
 }
 
@@ -51,8 +54,9 @@
 }
 
 .railButton[aria-current='page'] {
-  color: var(--dsw-alias-brand-primary-new-colorprimary-new-color);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary-new-colorprimary-new-color) 16%, transparent);
+  color: var(--dsh-hud-accent);
+  background: color-mix(in srgb, var(--dsh-hud-accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--dsh-hud-accent);
 }
 
 .railButton:focus-visible {
@@ -76,6 +80,13 @@
   min-width: 0;
   min-height: 0;
   border-right: 0.5px solid var(--dsw-alias-border-l3);
+  background-color: var(--dsw-alias-bg-layer-1);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 11px,
+    color-mix(in srgb, var(--dsh-hud-accent) 7%, transparent) 12px
+  );
 }
 
 .workflowHead,
@@ -90,6 +101,8 @@
   flex: none;
   margin: 0;
   padding: 14px 16px 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  background: color-mix(in srgb, var(--dsh-hud-accent) 6%, var(--dsw-alias-bg-layer-1));
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
@@ -112,6 +125,13 @@
   font-weight: 500;
 }
 
+.sectionTitle::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: color-mix(in srgb, var(--dsh-hud-accent) 45%, transparent);
+}
+
 .steps {
   position: relative;
   display: flex;
@@ -129,7 +149,7 @@
   top: 18px;
   bottom: 18px;
   width: 0.5px;
-  background: var(--dsw-alias-border-l3);
+  background: color-mix(in srgb, var(--dsh-hud-accent) 45%, transparent);
 }
 
 .step {
@@ -140,15 +160,17 @@
 }
 
 .stepActive {
+  position: relative;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   margin: 0 -8px;
   padding: 8px;
-  border: 1px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color);
-  border-radius: var(--dsw-radius-md);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary-new-colorprimary-new-color) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dsh-hud-accent) 72%, transparent);
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in srgb, var(--dsh-hud-accent) 12%, var(--dsw-alias-bg-layer-1));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--dsh-hud-accent) 18%, transparent);
 }
 
 .marker {
@@ -160,8 +182,8 @@
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  color: var(--dsw-alias-state-success-primary);
-  background: var(--dsw-alias-bg-base);
+  color: var(--dsh-hud-accent);
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .stepActive .marker {
@@ -182,8 +204,9 @@
 }
 
 .dotActive {
-  border: 1px solid var(--dsw-alias-brand-primary-new-colorprimary-new-color);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary-new-colorprimary-new-color) 35%, transparent);
+  border: 1px solid var(--dsh-hud-accent);
+  background: color-mix(in srgb, var(--dsh-hud-accent) 40%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--dsh-hud-accent) 55%, transparent);
 }
 
 .stepMain {
@@ -199,7 +222,7 @@
 }
 
 .stepActive .stepIndex {
-  color: var(--dsw-alias-brand-primary-new-colorprimary-new-color);
+  color: var(--dsh-hud-accent);
 }
 
 .stepTitle {
@@ -244,12 +267,13 @@
 .kind {
   flex: none;
   padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--dsh-hud-accent) 40%, transparent);
   border-radius: var(--dsw-radius-xs);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-secondary);
+  background: color-mix(in srgb, var(--dsh-hud-accent) 8%, transparent);
+  color: var(--dsh-hud-accent);
   font-family: var(--ds-font-family-code);
   font-size: 12px;
-  line-height: 18px;
+  line-height: 16px;
 }
 
 .traceBody {
@@ -271,10 +295,12 @@
   margin: 8px 12px 12px;
   padding: 8px 8px 8px 12px;
   border: 0;
-  border-radius: var(--dsw-radius-lg);
+  border-radius: var(--dsw-radius-md);
   background: var(--dsw-specific-input-major);
-  box-shadow: var(--dsw-elevation-soft);
-  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+  box-shadow:
+    var(--dsw-elevation-soft),
+    inset 0 0 0 0.5px color-mix(in srgb, var(--dsh-hud-accent) 42%, transparent);
+  --dsw-elevation-stroke-color: color-mix(in srgb, var(--dsh-hud-accent) 35%, transparent);
 }
 
 .draft {
@@ -322,8 +348,9 @@
 .send {
   border-radius: 50%;
   corner-shape: round;
-  background: var(--dsw-alias-brand-primary-new-colorprimary-new-color);
+  background: var(--dsh-hud-accent);
   color: var(--dsw-alias-label-on-color);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--dsh-hud-accent) 45%, transparent);
 }
 
 .send:disabled {
@@ -353,7 +380,11 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--dsw-alias-markdown-code-block);
+  background-color: var(--dsw-alias-markdown-code-block);
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--dsh-hud-accent) 9%, transparent),
+    transparent 88px
+  );
 }
 
 .tabBar {
@@ -382,6 +413,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--ds-font-family-code);
 }
 
 .crumbs {
@@ -391,7 +423,9 @@
   flex: none;
   margin: 0;
   padding: 6px 12px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
   font-size: 12px;
   line-height: 18px;
 }
@@ -459,10 +493,14 @@
   margin: 0;
   padding: 4px 12px;
   border-top: 0.5px solid var(--dsw-alias-border-l3);
-  color: var(--dsw-alias-label-tertiary);
-  font-family: var(--dsw-font-family);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
   font-size: 12px;
   line-height: 18px;
+}
+
+.statusCursor {
+  color: var(--dsh-hud-accent);
 }
 
 .statusGroup {

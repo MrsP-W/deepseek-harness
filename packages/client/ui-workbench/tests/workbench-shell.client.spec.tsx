@@ -74,6 +74,7 @@ describe('WorkbenchShell', () => {
     expect(getByLabelText(zh['editor.label']).textContent).toContain(zh['editor.written'])
     expect(getByLabelText(zh['editor.label']).textContent).toContain('Ln 18, Col 1')
     expect(document.querySelectorAll('[data-window-drag]')).toHaveLength(2)
+    expect(document.querySelector('[data-dsh-workbench]')).not.toBeNull()
     expect(getByLabelText(zh['editor.label']).textContent).toContain('split.ts')
     const draft = getByRole('textbox', { name: zh['composer.label'] }) as HTMLTextAreaElement
     expect(draft.placeholder).toBe(zh['composer.placeholder'])

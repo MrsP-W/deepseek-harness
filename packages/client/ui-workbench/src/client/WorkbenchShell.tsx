@@ -170,7 +170,7 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
   const valueMax = room === 0 ? rendered : Math.max(valueMin, room - editorFloor)
 
   return (
-    <div ref={shellRef} className={css.shell} data-workbench-shell="" style={widthStyle}>
+    <div ref={shellRef} className={css.shell} data-workbench-shell="" data-dsh-workbench="" style={widthStyle}>
       <nav className={css.rail} aria-label={t('rail.label')}>
         <div className={css.railGroup}>
           {RAIL.map(item => {
@@ -298,7 +298,7 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
           })}
         </div>
         <p className={css.statusBar}>
-          <span>{t('editor.cursor', { line: CURSOR_LINE, column: CURSOR_COLUMN })}</span>
+          <span className={css.statusCursor}>{t('editor.cursor', { line: CURSOR_LINE, column: CURSOR_COLUMN })}</span>
           <span className={css.statusGroup}>
             <span>{t('editor.language')}</span>
             <span>{t('editor.encoding')}</span>
