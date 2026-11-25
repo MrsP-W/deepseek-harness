@@ -25,7 +25,7 @@ This package draws the desktop workbench shell. It occupies the layout frame's `
 <a id="use-this-package"></a>
 ## Use this package
 
-The shell is a dark console: a session rail, a workflow column, and a code column, with a cyan accent, thin luminous rules, and a faint scan grid. The palette is scoped to this shell. The workflow column shows static steps, a static execution trace, and a draft field. The code column shows the placeholder file `src/lib/split.ts`. The draft stays in the page. Dragging the boundary, or pressing Left or Right on it, changes the workflow width. The width stays inside the measured shell and leaves at least 200px for the code column when the shell is wide enough, including the desktop minimum window of 520px. The workflow header and the editor tab bar are macOS window-drag rows. The shell does not read Session events or the workflow engine.
+The shell is a light workbench: a session rail, a workflow column, and a code column, with off-white grounds, near-black text, and one quiet blue. The palette is scoped to this shell. The workflow column shows static steps, a static execution trace, and a draft field. The code column shows the placeholder file `src/lib/split.ts`. The draft stays in the page. Dragging the boundary, or pressing Left or Right on it, changes the workflow width. The width stays inside the measured shell and leaves at least 200px for the code column when the shell is wide enough, including the desktop minimum window of 520px. The workflow header and the editor tab bar are macOS window-drag rows. The shell does not read Session events or the workflow engine.
 
 -----
 
