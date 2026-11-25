@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 /** Static desktop workbench shell: both columns, draft field, and column resize. */
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
-import { isDesktopWorkbenchDocument } from '../src/client/desktop-workbench.ts'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { zh } from '../src/client/locales/workbench.ts'
 import { WorkbenchShell, type WorkbenchText } from '../src/client/WorkbenchShell.tsx'
 
@@ -23,26 +22,34 @@ function installPointerCapture(): void {
   Element.prototype.hasPointerCapture = function (this: Element, id: number) { return captured.get(this) === id }
 }
 
+let shellWidth = 1440
+
 afterEach(() => {
+  shellWidth = 1440
   cleanup()
-  globalThis.__DSH_DESKTOP_WORKBENCH__ = undefined
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
-describe('desktop workbench document marker', () => {
-  it('is true only when the desktop index set the flag', () => {
-    expect(isDesktopWorkbenchDocument()).toBe(false)
-    globalThis.__DSH_DESKTOP_WORKBENCH__ = true
-    expect(isDesktopWorkbenchDocument()).toBe(true)
-    globalThis.__DSH_DESKTOP_WORKBENCH__ = undefined
-    expect(isDesktopWorkbenchDocument()).toBe(false)
-  })
-})
+function installMeasurement(): void {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => ({
+    width: shellWidth, height: 800, top: 0, left: 0, right: shellWidth, bottom: 800, x: 0, y: 0, toJSON: () => ({}),
+  }))
+  class ResizeObserverStub {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(): void { this.callback([], this as unknown as ResizeObserver) }
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+}
 
 describe('WorkbenchShell', () => {
   afterEach(() => { cleanup() })
 
   function mount() {
     installPointerCapture()
+    installMeasurement()
     const view = render(<WorkbenchShell t={t} />)
     const handle = view.getByRole('separator', { name: zh['resize.label'] })
     return { ...view, handle }
@@ -66,6 +73,7 @@ describe('WorkbenchShell', () => {
     expect(getByLabelText(zh['editor.label']).textContent).toContain("throw new Error('amount')")
     expect(getByLabelText(zh['editor.label']).textContent).toContain(zh['editor.written'])
     expect(getByLabelText(zh['editor.label']).textContent).toContain('Ln 18, Col 1')
+    expect(document.querySelectorAll('[data-window-drag]')).toHaveLength(2)
     expect(getByLabelText(zh['editor.label']).textContent).toContain('split.ts')
     const draft = getByRole('textbox', { name: zh['composer.label'] }) as HTMLTextAreaElement
     expect(draft.placeholder).toBe(zh['composer.placeholder'])
@@ -110,13 +118,47 @@ describe('WorkbenchShell', () => {
     pointer(handle, 'pointerDown', 0)
     handle.releasePointerCapture(1)
     pointer(handle, 'pointerUp', 400)
-    expect(handle.getAttribute('aria-valuenow')).toBe('720')
+    expect(handle.getAttribute('aria-valuenow')).toBe('870')
+    expect(handle.getAttribute('aria-valuemax')).toBe('1184')
     pointer(handle, 'pointerDown', 1000)
     pointer(handle, 'pointerCancel', -1000)
-    expect(handle.getAttribute('aria-valuenow')).toBe('280')
+    expect(handle.getAttribute('aria-valuenow')).toBe('200')
     pointer(handle, 'pointerDown', 0)
     unmount()
     expect(handle.hasPointerCapture(1)).toBe(false)
+  })
+
+  it('fits both columns inside the desktop minimum window', () => {
+    shellWidth = 520
+    const wide = mount()
+    expect(wide.handle.getAttribute('aria-valuemin')).toBe('200')
+    expect(wide.handle.getAttribute('aria-valuemax')).toBe('264')
+    expect(wide.handle.getAttribute('aria-valuenow')).toBe('264')
+    fireEvent.keyDown(wide.handle, { key: 'ArrowRight' })
+    expect(wide.handle.getAttribute('aria-valuenow')).toBe('264')
+    wide.unmount()
+    shellWidth = 300
+    const narrow = mount()
+    expect(narrow.handle.getAttribute('aria-valuenow')).toBe('122')
+    narrow.unmount()
+    shellWidth = 40
+    const cramped = mount()
+    expect(cramped.handle.getAttribute('aria-valuenow')).toBe('0')
+  })
+
+  it('ignores a zero shell measurement', () => {
+    shellWidth = 0
+    const { handle } = mount()
+    expect(handle.getAttribute('aria-valuenow')).toBe('440')
+  })
+
+  it('keeps the preferred width until the shell is measured', () => {
+    vi.stubGlobal('ResizeObserver', undefined)
+    installPointerCapture()
+    const view = render(<WorkbenchShell t={t} />)
+    const handle = view.getByRole('separator', { name: zh['resize.label'] })
+    expect(handle.getAttribute('aria-valuenow')).toBe('440')
+    expect(handle.getAttribute('aria-valuemin')).toBe('0')
   })
 
   it('releases a drag that no longer owns the pointer when the shell unmounts', () => {

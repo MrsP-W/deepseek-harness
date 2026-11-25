@@ -7,6 +7,7 @@ import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { AppFrame } from '../src/client/AppFrame.tsx'
+import { isDesktopWorkbenchDocument } from '../src/client/desktop-workbench.ts'
 import type { AppFrameProps } from '../src/client/AppFrame.tsx'
 import type { MainPanelId, RightbarOwnerProps, SidebarOwnerProps } from '../src/client/index.ts'
 import { createLayoutStore } from '../src/client/stores.ts'
@@ -800,17 +801,23 @@ describe('sidebar drawer', () => {
 })
 
 describe('desktop workbench document', () => {
-  it('replaces the three columns with the workflow and code shell', () => {
+  it('is marked only by the desktop index', () => {
+    expect(isDesktopWorkbenchDocument()).toBe(false)
+    globalThis.__DSH_DESKTOP_WORKBENCH__ = true
+    expect(isDesktopWorkbenchDocument()).toBe(true)
+  })
+
+  it('renders the workbench slot instead of the three columns', () => {
     globalThis.__DSH_DESKTOP_WORKBENCH__ = true
     const { frame, queryByTestId, getByTestId } = mountFrame()
     expect(frame.hasAttribute('data-workbench')).toBe(true)
     expect(frame.style.gridTemplateColumns).toBe('')
-    expect(frame.querySelector('[data-workbench-shell]')).not.toBeNull()
+    expect(getByTestId('workbench-content')).toBeTruthy()
     expect(queryByTestId('sidebar-content')).toBeNull()
     expect(queryByTestId('main-content')).toBeNull()
     expect(queryByTestId('rightbar-content')).toBeNull()
     expect(getByTestId('shell.bottom-content')).toBeTruthy()
     expect(getByTestId('shell.overlay-content')).toBeTruthy()
-    expect(document.title).toBe('title')
+    expect(document.title).toBe('DSH Local Build')
   })
 })

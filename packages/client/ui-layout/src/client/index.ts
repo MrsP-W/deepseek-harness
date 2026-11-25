@@ -20,10 +20,6 @@ import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { en, ja, es, fr, de, ru, pt, zh } from './shortcut-locales.ts'
-import {
-  de as workbenchDe, en as workbenchEn, es as workbenchEs, fr as workbenchFr,
-  ja as workbenchJa, pt as workbenchPt, ru as workbenchRu, zh as workbenchZh,
-} from './locales/workbench.ts'
 import { ThemePresenter } from './theme-presenter.ts'
 
 // Contract exports only (export-convergence rule: cross-package consumers
@@ -48,8 +44,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Layout keyboard command labels. */
     'shortcuts.layout': keyof typeof zh
-    /** Desktop workbench shell copy. */
-    'workbench': keyof typeof workbenchZh
   }
 
   interface GlobalStandardProps {
@@ -125,6 +119,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * the lights or the controls.
      */
     'shell.leading': { kind: 'single'; scope: 'root' }
+    /**
+     * Full-frame replacement used by the desktop workbench document.
+     * The frame renders this slot instead of the three columns when that
+     * document is marked. The occupant owns the panes inside it.
+     */
+    'workbench': { kind: 'single'; scope: 'root' }
   }
 }
 
@@ -167,10 +167,6 @@ export const inject = ['slots', 'theme', 'locale', 'shortcuts']
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register('shortcuts.layout', { zh, en, ja, es, fr, de, ru, pt }), 'layout: command labels')
-  ctx.effect(() => ctx.locale.register('workbench', {
-    zh: workbenchZh, en: workbenchEn, ja: workbenchJa, es: workbenchEs,
-    fr: workbenchFr, de: workbenchDe, ru: workbenchRu, pt: workbenchPt,
-  }), 'layout: workbench copy')
   const t = ctx.locale.bind('shortcuts.layout')
 
   ctx.effect(() => {
@@ -201,11 +197,12 @@ export function apply(ctx: ClientContext): void {
     const disposeService = ctx.reflect.provide('layout', layout)
     const disposeRegistration = ctx.slots.register({
       name: 'root',
-      locale: 'workbench',
+      locale: 'common',
       children: {
         'sidebar': { kind: 'single', scope: 'root' },
         'main': { kind: 'keyed', scope: 'root' },
         'rightbar': { kind: 'single', scope: 'root' },
+        'workbench': { kind: 'single', scope: 'root' },
         'shell.bottom': { kind: 'single', scope: 'root' },
         'shell.overlay': { kind: 'list', scope: 'root' },
         'shell.leading': { kind: 'single', scope: 'root' },

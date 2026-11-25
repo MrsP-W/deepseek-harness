@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包提供 Web GUI 的三栏 AppFrame、左右栏宽度与 `ctx.layout` 呈现控制。右栏先让步以保护中栏空间，全屏由占用方呈现，框架保留宽屏底层轨道。主题呈现器负责配色、别名 token、字号、字体列表与 document 元数据；布局状态在刷新后重置。桌面文档设置工作台标记时，同一框架改为渲染工作台外壳，不再使用这三列。
+本包提供 Web GUI 的三栏 AppFrame、左右栏宽度与 `ctx.layout` 呈现控制。右栏先让步以保护中栏空间，全屏由占用方呈现，框架保留宽屏底层轨道。主题呈现器负责配色、别名 token、字号、字体列表与 document 元数据；布局状态在刷新后重置。桌面文档设置工作台标记时，同一框架改为渲染 `workbench` slot，不再使用这三列。
 
 ## 目录
 
@@ -35,7 +35,7 @@ kind: "package-reference"
 
 全局面板占据 root 作用域的 `main` keyed slot；`conversation` 是为会话界面保留的 key。`ctx.layout.selectPanel(id)` 选中已注册面板，`null` 则选中会话界面，但不改变当前会话。Plugins 页面是默认组合中的一个全局面板。`selectPanel` 会替换主栏，因此不能同时显示工作流栏和代码栏。
 
-桌面应用的 index 在客户端启动前设置 `__DSH_DESKTOP_WORKBENCH__`。AppFrame 随后用工作台外壳铺满窗口：会话栏、工作流栏（静态步骤、静态执行轨迹和草稿输入）以及打开占位文件 `src/lib/split.ts` 的代码栏。两栏同时留在屏幕上。拖动分界使工作流栏保持在 280px 到 720px 之间。Web 应用不设置该标记，并保留三栏框架。该外壳不读取会话事件或工作流引擎，草稿只留在页面内。
+桌面应用的 index 在客户端启动前设置 `__DSH_DESKTOP_WORKBENCH__`。AppFrame 随后渲染 root 作用域的单一 `workbench` slot，不再挂载侧栏、主栏和右栏。[ui-workbench](../ui-workbench/README.zh.md) 占据该 slot。Web 应用不设置该标记，并保留三栏框架。
 
 root 作用域的单一 `shell.bottom` slot 横跨三列下方的整行。占用方控制自身高度与显隐；三列按该高度缩短，空内容不预留空间。切换主面板时保留底部组件。列宽拖拽手柄止于底部内容上方，`shell.overlay` 仍覆盖整个框架。默认组合不占用此 slot。
 
@@ -64,7 +64,7 @@ root 注册通过注入的可观察源提供横屏折叠状态，由渲染器负
 
 `selectPanel(id)` 在改变选中态前检查实时 `main` 注册表；缺失的 key 会抛错并保留当前面板。`beginNavigation()` 为异步 UI 导航返回 abort signal。后续调用、有效面板选择（包括重复选择）或布局释放会中止该 signal，但不取消底层会话创建。消费方在提交导航或搬移草稿前检查 signal。
 
-一次注册声明框架的子 slot，并绑定 `ctx.layout` 的 `selectPanel`、`toggleSidebar`、`openRightbar(track, fullscreen)` 与 `closeRightbar`。同一个 root 存储把 `panelInfo` 选中态与 `layoutInfo` 测量、宽度偏好、呈现报告分开。`ctx.layout.panelInfo` 与标准 `usePanelInfo` hook 共用同一个选中态来源；AppFrame 订阅引用稳定的布局对象。`rightbar` owner 提供实际 `width`、`viewportWidth`，以及表示能否以普通模式呈现的 `canShow`；占用方在空间不足时执行确定性的收起，变宽不自行重新展开。全屏隐藏宽度手柄，但不自行释放占用方要求保留的轨道。AppFrame 保持各列容器挂载。右栏的 root 控制器仅在选中会话界面时，经 `SessionProvider` 渲染 `rightbar.session`；内容卸载时的报告释放轨道。独立的标题组件仅在会话界面可见时使用所选会话标题，以构建配置的产品标题或本地化 `common.brand.localBuild` 为回退值；语言变化会更新该回退值。桌面工作台文档用工作台标题作为窗口标题，并且不挂载侧栏、主栏或右栏。主题呈现器是第二个 effect：从解析后的快照做纯 DOM 写入——初始状态经 getter 读取一次，此后仅事件驱动，不经过 React。它先应用调色板、字号、字体列表与 token 变量，再把渲染出的背景测量为唯一的颜色依据。全屏呈现禁用网格和手柄过渡；占用方完全覆盖框架后才报告新的列布局。退出全屏时，框架先保持无过渡并安装目标布局：关闭移除右轨道，恢复保留右轨道。后续普通几何操作恢复正常过渡。
+一次注册声明框架的子 slot，并绑定 `ctx.layout` 的 `selectPanel`、`toggleSidebar`、`openRightbar(track, fullscreen)` 与 `closeRightbar`。同一个 root 存储把 `panelInfo` 选中态与 `layoutInfo` 测量、宽度偏好、呈现报告分开。`ctx.layout.panelInfo` 与标准 `usePanelInfo` hook 共用同一个选中态来源；AppFrame 订阅引用稳定的布局对象。`rightbar` owner 提供实际 `width`、`viewportWidth`，以及表示能否以普通模式呈现的 `canShow`；占用方在空间不足时执行确定性的收起，变宽不自行重新展开。全屏隐藏宽度手柄，但不自行释放占用方要求保留的轨道。AppFrame 保持各列容器挂载。右栏的 root 控制器仅在选中会话界面时，经 `SessionProvider` 渲染 `rightbar.session`；内容卸载时的报告释放轨道。独立的标题组件仅在会话界面可见时使用所选会话标题，以构建配置的产品标题或本地化 `common.brand.localBuild` 为回退值；语言变化会更新该回退值。桌面文档设置工作台标记时，AppFrame 渲染 `workbench` slot，不挂载侧栏、主栏或右栏。主题呈现器是第二个 effect：从解析后的快照做纯 DOM 写入——初始状态经 getter 读取一次，此后仅事件驱动，不经过 React。它先应用调色板、字号、字体列表与 token 变量，再把渲染出的背景测量为唯一的颜色依据。全屏呈现禁用网格和手柄过渡；占用方完全覆盖框架后才报告新的列布局。退出全屏时，框架先保持无过渡并安装目标布局：关闭移除右轨道，恢复保留右轨道。后续普通几何操作恢复正常过渡。
 
 </details>
 
@@ -75,6 +75,7 @@ root 注册通过注入的可观察源提供横屏折叠状态，由渲染器负
 
 当布局面不够用时阅读以下页面。它们从框架进入它所渲染的栏与它所呈现的主题。
 
+- [ui-workbench](../ui-workbench/README.zh.md)——占据桌面 `workbench` slot。
 - [ui-sidebar](../ui-sidebar/README.zh.md)——占据 `sidebar` 栏及其座位。
 - [ui-conversation](../ui-conversation/README.zh.md)——占据 `main` 中的 `conversation` key。
 - [ui-sidebar-right](../ui-sidebar-right/README.zh.md)——以每会话一个停靠面占据 `rightbar` 栏。
@@ -103,7 +104,7 @@ root 注册通过注入的可观察源提供横屏折叠状态，由渲染器负
 - **极窄窗口**——右侧面板关闭后，中栏仍可能小于 400px；低于 768px 时，浏览器抽屉不占据侧栏宽度。
 - **轨道与面板仅在动画期间沿同一条曲线运动**——离散开合时框架设置 `data-animating`，其轨道过渡和占用方的滑入读取同一组时长与缓动变量；占用方若自用一套，挤压时面板边缘就会与会话界面的边缘脱开。拖拽和即时呈现切换不带过渡，因此该曲线不覆盖它们。
 - **挤压重排期间无滚动锚定**——布局变化可能移动读者的视口。
-- **桌面工作台是静态外壳**——步骤、轨迹和 `src/lib/split.ts` 都是占位内容。该文档不显示会话侧栏、全局面板或右侧停靠栏。
+- **桌面工作台文档不显示三栏**——该文档渲染 `workbench` slot，不挂载会话侧栏、全局面板或右侧停靠栏。
 
 <a id="dev-note"></a>
 ### 开发备注

@@ -8,8 +8,8 @@
  * binding and reports the geometry it needs.
  *
  * The desktop application document sets `__DSH_DESKTOP_WORKBENCH__`. That
- * document renders the workbench shell instead of the three columns, so the
- * workflow column and the code column stay visible together.
+ * document renders the `workbench` slot instead of the three columns, so a
+ * feature plugin can show two panes together. The frame does not own that UI.
  *
  * The right column is a track, not a box: its occupant draws its panel anchored
  * to the frame's right edge at the resolved normal width, and the
@@ -27,7 +27,6 @@ import { CENTER_MIN, clampWidth, computeColumns, RIGHTBAR_DEFAULT_RATIO, RIGHTBA
 import { isDesktopWorkbenchDocument } from './desktop-workbench.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
-import { WorkbenchShell } from './WorkbenchShell.tsx'
 import css from './AppFrame.module.css'
 
 /** Browser posture supplied by the root registration. */
@@ -38,9 +37,9 @@ export interface AppFrameInjected {
 /** Full composed props: runtime, child slots, store, locale, and injected posture. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.bottom' | 'shell.overlay' | 'shell.leading'>
+  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'workbench' | 'shell.bottom' | 'shell.overlay' | 'shell.leading'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
-  & PropsLocale<'workbench'>
+  & PropsLocale<'common'>
   & InjectFace<AppFrameInjected>
 
 /** Center column grid item (session-body building block). */
@@ -265,7 +264,7 @@ export function AppFrame({
     actions.setRightbar(rightbarBase.current - dx)
   }, [actions])
   const workbench = isDesktopWorkbenchDocument()
-  const productTitle = workbench ? t('title') : process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
+  const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
   // The rendered template lets the grid solve the squeeze natively: the centre
   // declares its protected minimum and the right column bids up to the clamped
   // preference, so a window resize lands in the same layout pass as the frame
@@ -300,7 +299,7 @@ export function AppFrame({
           useSessions={useSessions}
           usePanelInfo={usePanelInfo}
         />
-        <WorkbenchShell t={t} />
+        {renderSlot('workbench', {})}
         <div className={css.bottomRow} data-shell-bottom>
           {renderSlot('shell.bottom', {})}
         </div>

@@ -92,6 +92,7 @@ describe('ui-layout client apply', () => {
     expect(slots.spec('shell.bottom')).toEqual({ kind: 'single', scope: 'root' })
     expect(slots.spec('shell.overlay')).toEqual({ kind: 'list', scope: 'root' })
     expect(slots.spec('shell.leading')).toEqual({ kind: 'single', scope: 'root' })
+    expect(slots.spec('workbench')).toEqual({ kind: 'single', scope: 'root' })
   })
 
   it('keeps Desktop sidebar shortcuts behind a foreground modal', async () => {

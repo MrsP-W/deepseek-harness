@@ -3,7 +3,7 @@
  * Steps, the execution trace, and the editor file are static placeholders.
  * The draft field stays in this page and does not start a Session turn.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import {
   IconApiOutlineMedium, IconBranchOutlineMedium, IconChecklistOutlineMedium,
@@ -27,9 +27,24 @@ export interface WorkbenchShellProps {
   t: WorkbenchText
 }
 
-const WORKFLOW_MIN = 280
-const WORKFLOW_MAX = 720
-const WORKFLOW_DEFAULT = 440
+const RAIL_WIDTH = 56
+const PANE_MIN = 200
+const PREFERRED = 440
+
+/**
+ * Workflow width that leaves the code column usable inside the measured shell.
+ * @param preference - Dragged or default workflow width in px.
+ * @param container - Shell width in px. Zero means the shell has not been measured.
+ * @returns The width to apply, in px.
+ */
+function fitWorkflow(preference: number, container: number): number {
+  const room = Math.max(0, container - RAIL_WIDTH)
+  if (room === 0) return 0
+  const editorFloor = Math.min(PANE_MIN, room / 2)
+  const floor = Math.min(PANE_MIN, Math.max(0, room - editorFloor))
+  const ceiling = Math.max(floor, room - editorFloor)
+  return Math.min(ceiling, Math.max(floor, preference))
+}
 
 const KEYWORDS = new Set(['export', 'interface', 'type', 'async', 'function', 'const', 'let', 'if', 'for', 'switch', 'case', 'throw', 'new', 'return', 'of', 'break'])
 
@@ -65,10 +80,6 @@ const CRUMBS = ['src', 'lib', 'split.ts'] as const
 
 type TokenKind = 'comment' | 'string' | 'keyword' | 'number' | 'plain'
 
-function clampWorkflow(px: number): number {
-  return Math.min(WORKFLOW_MAX, Math.max(WORKFLOW_MIN, px))
-}
-
 function sourceTokens(line: string): string[] {
   return [...line.matchAll(/\/\/.*|'(?:[^'\n])*'|\b(?:export|interface|type|async|function|const|let|if|for|switch|case|throw|new|return|of|break)\b|\d+|[A-Za-z_]\w*|./gu)].map(match => match[0])
 }
@@ -94,9 +105,29 @@ function traceBody(id: typeof TRACE[number]['id'], t: WorkbenchText): string {
  * @returns The rail, workflow column, editor column, and the column separator.
  */
 export function WorkbenchShell({ t }: WorkbenchShellProps) {
-  const [width, setWidth] = useState(WORKFLOW_DEFAULT)
+  const [preference, setPreference] = useState(PREFERRED)
+  const [container, setContainer] = useState(0)
   const [draft, setDraft] = useState('')
+  const shellRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef(0)
   const capture = useRef<{ element: HTMLDivElement; id: number; origin: number; base: number } | null>(null)
+  const rendered = container > 0 ? fitWorkflow(preference, container) : preference
+  useLayoutEffect(() => {
+    const el = shellRef.current
+    if (typeof ResizeObserver !== 'function') return
+    /* v8 ignore next -- the shell div renders before this effect, so the ref is set */
+    if (el === null) return
+    const measure = () => {
+      const next = el.getBoundingClientRect().width
+      if (next <= 0) return
+      containerRef.current = next
+      setContainer(next)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
   useEffect(() => () => {
     const active = capture.current
     if (active !== null && active.element.hasPointerCapture(active.id)) active.element.releasePointerCapture(active.id)
@@ -106,19 +137,19 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
     if (event.button !== 0 || capture.current !== null) return
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
-    capture.current = { element: event.currentTarget, id: event.pointerId, origin: event.clientX, base: width }
+    capture.current = { element: event.currentTarget, id: event.pointerId, origin: event.clientX, base: rendered }
   }
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const active = capture.current
     if (active?.id !== event.pointerId) return
-    setWidth(clampWorkflow(active.base + event.clientX - active.origin))
+    setPreference(fitWorkflow(active.base + event.clientX - active.origin, containerRef.current))
   }
   const endDrag = (event: PointerEvent<HTMLDivElement>) => {
     const active = capture.current
     if (active?.id !== event.pointerId) return
     capture.current = null
     if (active.element.hasPointerCapture(active.id)) active.element.releasePointerCapture(active.id)
-    setWidth(clampWorkflow(active.base + event.clientX - active.origin))
+    setPreference(fitWorkflow(active.base + event.clientX - active.origin, containerRef.current))
   }
   const onLostPointerCapture = (event: PointerEvent<HTMLDivElement>) => {
     if (capture.current?.id !== event.pointerId) return
@@ -128,11 +159,18 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
     event.preventDefault()
     const delta = event.key === 'ArrowRight' ? 16 : -16
-    setWidth(current => clampWorkflow(current + delta))
+    setPreference(current => fitWorkflow(current + delta, containerRef.current))
   }
+  const widthStyle = container > 0
+    ? { '--dsh-workbench-workflow': `${rendered}px` } as CSSProperties
+    : undefined
+  const room = Math.max(0, container - RAIL_WIDTH)
+  const editorFloor = room === 0 ? 0 : Math.min(PANE_MIN, room / 2)
+  const valueMin = room === 0 ? 0 : Math.min(PANE_MIN, Math.max(0, room - editorFloor))
+  const valueMax = room === 0 ? rendered : Math.max(valueMin, room - editorFloor)
 
   return (
-    <div className={css.shell} data-workbench-shell="" style={{ '--dsh-workbench-workflow': `${width}px` } as CSSProperties}>
+    <div ref={shellRef} className={css.shell} data-workbench-shell="" style={widthStyle}>
       <nav className={css.rail} aria-label={t('rail.label')}>
         <div className={css.railGroup}>
           {RAIL.map(item => {
@@ -155,7 +193,7 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
         </button>
       </nav>
       <section className={css.workflow} aria-label={t('section.workflow')}>
-        <h2 className={css.paneTop}>
+        <h2 className={`${css.workflowHead} ${css.paneTop}`} data-window-drag>
           <IconBranchOutlineMedium size={16} />
           {t('section.workflow')}
         </h2>
@@ -231,7 +269,7 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
         </div>
       </section>
       <section className={css.editor} aria-label={t('editor.label')}>
-        <div className={`${css.tabBar} ${css.paneTop}`}>
+        <div className={`${css.editorHead} ${css.tabBar} ${css.paneTop}`} data-window-drag>
           <span className={css.badge}>{t('editor.badge')}</span>
           <span className={css.tabPath}>{SAMPLE_FILE}</span>
         </div>
@@ -274,9 +312,9 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
         role="separator"
         aria-orientation="vertical"
         aria-label={t('resize.label')}
-        aria-valuemin={WORKFLOW_MIN}
-        aria-valuemax={WORKFLOW_MAX}
-        aria-valuenow={width}
+        aria-valuemin={valueMin}
+        aria-valuemax={valueMax}
+        aria-valuenow={rendered}
         tabIndex={0}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
