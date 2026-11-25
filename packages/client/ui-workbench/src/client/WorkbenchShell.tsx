@@ -1,7 +1,6 @@
 /**
- * Desktop workbench empty shell: session rail, workflow column, and code column.
- * Steps, the execution trace, and the editor file are static placeholders.
- * The draft field stays in this page and does not start a Session turn.
+ * Desktop workbench: session rail, live workflow column, and the file being written.
+ * Steps and the trace come from the current Session. Sending the draft starts a turn.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
@@ -12,10 +11,9 @@ import {
   IconLayersOutlineMedium, IconNewChatOutlineMedium, IconPaperclipOutlineMedium,
   IconSendOutlineMedium, IconSettingsOutlineMedium, IconCheckCircleFillMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-store'
+import type { ActivityStep, ActivityTrace, WorkbenchView } from './activity.ts'
 import type { WorkbenchKey } from './locales/workbench.ts'
-import {
-  ANNOTATED_LINES, CURSOR_COLUMN, CURSOR_LINE, SAMPLE_CODE, SAMPLE_FILE,
-} from './workbench-sample.ts'
 import css from './WorkbenchShell.module.css'
 
 /** Translate a workbench dictionary key, with `{name}` substitution. */
@@ -25,6 +23,14 @@ export type WorkbenchText = (key: WorkbenchKey, params?: Record<string, unknown>
 export interface WorkbenchShellProps {
   /** Active-locale workbench copy. */
   t: WorkbenchText
+  /** Current Session projection and send state. */
+  useActivity: SnapshotSelectorHook<WorkbenchView>
+  /**
+   * Send the draft as one Session prompt.
+   * @param text - trimmed draft.
+   * @returns whether the Host accepted it.
+   */
+  send: (text: string) => Promise<boolean>
 }
 
 const RAIL_WIDTH = 56
@@ -57,26 +63,19 @@ const RAIL = [
   { id: 'metrics', nameKey: 'rail.metrics', Icon: IconDataOutlineMedium, current: false },
 ] as const
 
-const STEPS = [
-  { id: 'parse', title: 'step.parse.title', status: 'done', time: '14:28' },
-  { id: 'design', title: 'step.design.title', status: 'done', time: '14:29' },
-  { id: 'implement', title: 'step.implement.title', status: 'active', time: '14:32' },
-  { id: 'test', title: 'step.test.title', status: 'waiting' },
-] as const
-
 const STATUS_KEY = {
   done: 'status.done',
   active: 'status.active',
   waiting: 'status.waiting',
+  error: 'status.error',
 } as const
 
-const TRACE = [
-  { id: 'create', kind: 'write', time: '14:31:47', Icon: IconEditOutlineMedium },
-  { id: 'edit', kind: 'edit', time: '14:32:05', Icon: IconFilesDiffOutlineMedium },
-  { id: 'todo', kind: 'todo', time: '14:32:10', Icon: IconChecklistOutlineMedium },
-] as const
-
-const CRUMBS = ['src', 'lib', 'split.ts'] as const
+const TRACE_ICON = {
+  write: IconEditOutlineMedium,
+  edit: IconFilesDiffOutlineMedium,
+  todo: IconChecklistOutlineMedium,
+  call: IconCodeOutlineMedium,
+} as const
 
 type TokenKind = 'comment' | 'string' | 'keyword' | 'number' | 'plain'
 
@@ -93,21 +92,37 @@ function tokenKind(token: string): TokenKind {
   return 'plain'
 }
 
-function traceBody(id: typeof TRACE[number]['id'], t: WorkbenchText): string {
-  if (id === 'create') return t('trajectory.create', { path: SAMPLE_FILE })
-  if (id === 'edit') return t('trajectory.edit', { path: SAMPLE_FILE, lines: '18-42' })
-  return t('trajectory.todo')
+function stepTitle(step: ActivityStep, t: WorkbenchText): string {
+  if (step.title !== '') return step.title
+  if (step.turn !== undefined) return t('step.turn', { n: step.turn })
+  return t('step.waiting.title')
+}
+
+function traceBody(event: ActivityTrace, t: WorkbenchText): string {
+  if (event.action === 'write' && event.path !== undefined) return t('trajectory.write', { path: event.path })
+  if (event.action === 'edit' && event.path !== undefined) return t('trajectory.edit', { path: event.path, lines: event.lines ?? '' })
+  if (event.action === 'todo') return t('trajectory.todo')
+  return t('trajectory.call', { name: event.kind })
 }
 
 /**
  * Render the two-column workbench shell.
- * @param props - Localized copy for the static shell.
+ * @param props - Copy, the Session projection, and the send action.
  * @returns The rail, workflow column, editor column, and the column separator.
  */
-export function WorkbenchShell({ t }: WorkbenchShellProps) {
+export function WorkbenchShell({ t, useActivity, send }: WorkbenchShellProps) {
   const [preference, setPreference] = useState(PREFERRED)
   const [container, setContainer] = useState(0)
+  const activity = useActivity(view => view)
   const [draft, setDraft] = useState('')
+  const submit = () => {
+    const text = draft.trim()
+    if (text === '' || activity.sending) return
+    const pending = draft
+    void send(text).then(accepted => {
+      if (accepted) setDraft(current => current === pending ? '' : current)
+    })
+  }
   const shellRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef(0)
   const capture = useRef<{ element: HTMLDivElement; id: number; origin: number; base: number } | null>(null)
@@ -199,7 +214,7 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
         </h2>
         <div className={css.workflowBody}>
           <ol className={css.steps}>
-            {STEPS.map((step, index) => {
+            {activity.steps.map((step, index) => {
               const active = step.status === 'active'
               const waiting = step.status === 'waiting'
               return (
@@ -218,12 +233,12 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
                   <div>
                     <div className={css.stepMain}>
                       <span className={css.stepIndex}>{index + 1}</span>
-                      <span className={css.stepTitle}>{t(step.title)}</span>
+                      <span className={css.stepTitle}>{stepTitle(step, t)}</span>
                       <span className={css.stepStatus}>{t(STATUS_KEY[step.status])}</span>
-                      {'time' in step && <time className={css.stepTime} dateTime={step.time}>{step.time}</time>}
+                      {step.time !== undefined && <time className={css.stepTime} dateTime={step.time}>{step.time}</time>}
                     </div>
-                    {step.id === 'implement' && (
-                      <p className={css.stepDetail}>{t('step.implement.detail', { path: SAMPLE_FILE })}</p>
+                    {step.detail !== undefined && step.path !== undefined && (
+                      <p className={css.stepDetail}>{t(step.detail === 'writing' ? 'step.detail.writing' : 'step.detail.editing', { path: step.path })}</p>
                     )}
                   </div>
                 </li>
@@ -235,13 +250,13 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
             {t('section.trajectory')}
           </h3>
           <ol className={css.trace}>
-            {TRACE.map(event => {
-              const Icon = event.Icon
+            {activity.trace.map(event => {
+              const Icon = TRACE_ICON[event.action]
               return (
-                <li key={event.id} className={css.traceRow} data-workbench-trace={event.id}>
+                <li key={event.id} className={css.traceRow} data-workbench-trace={event.id} data-status={event.status}>
                   <Icon size={14} />
                   <span className={css.kind}>{event.kind}</span>
-                  <span className={css.traceBody}>{traceBody(event.id, t)}</span>
+                  <span className={css.traceBody}>{traceBody(event, t)}</span>
                   <time className={css.traceTime} dateTime={event.time}>{event.time}</time>
                 </li>
               )
@@ -249,6 +264,7 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
           </ol>
         </div>
         <div className={css.composer} data-workbench-composer="">
+          <div className={css.composerRow}>
           <textarea
             className={css.draft}
             value={draft}
@@ -257,55 +273,68 @@ export function WorkbenchShell({ t }: WorkbenchShellProps) {
             aria-label={t('composer.label')}
             spellCheck={false}
             onChange={event => { setDraft(event.target.value) }}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                submit()
+              }
+            }}
           />
           <div className={css.composerActions}>
             <button type="button" className={css.iconButton} aria-label={t('composer.attach')}>
               <IconPaperclipOutlineMedium size={16} />
             </button>
-            <button type="button" className={css.send} aria-label={t('composer.send')} disabled={draft.trim() === ''}>
+            <button type="button" className={css.send} aria-label={t('composer.send')} disabled={draft.trim() === '' || activity.sending} onClick={submit}>
               <IconSendOutlineMedium size={16} />
             </button>
           </div>
+          </div>
+          {activity.failed && <p className={css.composerError} role="alert">{t('composer.failed')}</p>}
         </div>
       </section>
       <section className={css.editor} aria-label={t('editor.label')}>
         <div className={`${css.editorHead} ${css.tabBar} ${css.paneTop}`} data-window-drag>
-          <span className={css.badge}>{t('editor.badge')}</span>
-          <span className={css.tabPath}>{SAMPLE_FILE}</span>
+          {activity.file !== null && activity.file.badge !== '' && <span className={css.badge}>{activity.file.badge}</span>}
+          <span className={css.tabPath}>{activity.file?.path ?? ''}</span>
         </div>
-        <p className={css.crumbs}>
-          {CRUMBS.map((crumb, index) => (
-            <span key={crumb} className={css.crumb}>
-              {index > 0 && <IconChevronRightOutlineMedium size={12} />}
-              {crumb}
-            </span>
-          ))}
-        </p>
-        <div className={css.codeScroll}>
-          {SAMPLE_CODE.map((line, index) => {
-            const lineNo = index + 1
-            return (
-              <div key={lineNo} className={css.codeLine}>
-                <span className={css.lineNo}>{lineNo}</span>
-                <code className={css.lineCode}>
-                  {sourceTokens(line).map((value, tokenIndex) => (
-                    <span key={tokenIndex} className={css[tokenKind(value)]}>{value}</span>
-                  ))}
-                </code>
-                {ANNOTATED_LINES.has(lineNo) && <span className={css.annotation}>{t('editor.written')}</span>}
-              </div>
-            )
-          })}
-        </div>
-        <p className={css.statusBar}>
-          <span className={css.statusCursor}>{t('editor.cursor', { line: CURSOR_LINE, column: CURSOR_COLUMN })}</span>
-          <span className={css.statusGroup}>
-            <span>{t('editor.language')}</span>
-            <span>{t('editor.encoding')}</span>
-            <span>{t('editor.newlines')}</span>
-            <span>{t('editor.indent')}</span>
-          </span>
-        </p>
+        {activity.file === null ? (
+          <p className={css.empty}>{t('editor.empty')}</p>
+        ) : (
+          <>
+            <p className={css.crumbs}>
+              {activity.file.crumbs.map((crumb, index) => (
+                <span key={`${index}-${crumb}`} className={css.crumb}>
+                  {index > 0 && <IconChevronRightOutlineMedium size={12} />}
+                  {crumb}
+                </span>
+              ))}
+            </p>
+            <div className={css.codeScroll}>
+              {activity.file.lines.map((line, index) => {
+                const lineNo = index + 1
+                return (
+                  <div key={lineNo} className={css.codeLine}>
+                    <span className={css.lineNo}>{lineNo}</span>
+                    <code className={css.lineCode}>
+                      {sourceTokens(line).map((value, tokenIndex) => (
+                        <span key={tokenIndex} className={css[tokenKind(value)]}>{value}</span>
+                      ))}
+                    </code>
+                    {activity.file?.annotated.includes(lineNo) && <span className={css.annotation}>{t('editor.written')}</span>}
+                  </div>
+                )
+              })}
+            </div>
+            <p className={css.statusBar}>
+              <span className={css.statusCursor}>{t('editor.cursor', { line: activity.file.cursorLine, column: activity.file.cursorColumn })}</span>
+              <span className={css.statusGroup}>
+                <span>{t('editor.encoding')}</span>
+                <span>{t('editor.newlines')}</span>
+                <span>{t('editor.indent')}</span>
+              </span>
+            </p>
+          </>
+        )}
       </section>
       <div
         className={css.handle}

@@ -25,7 +25,7 @@ This package draws the desktop workbench shell. It occupies the layout frame's `
 <a id="use-this-package"></a>
 ## Use this package
 
-The shell is a light workbench: a session rail, a workflow column, and a code column, with off-white grounds, near-black text, and one quiet blue. The palette is scoped to this shell. The workflow column shows static steps, a static execution trace, and a draft field. The code column shows the placeholder file `src/lib/split.ts`. The draft stays in the page. Dragging the boundary, or pressing Left or Right on it, changes the workflow width. The width stays inside the measured shell and leaves at least 200px for the code column when the shell is wide enough, including the desktop minimum window of 520px. The workflow header and the editor tab bar are macOS window-drag rows. The shell does not read Session events or the workflow engine.
+The shell is a light workbench: a session rail, a workflow column, and a code column, with off-white grounds, near-black text, and one quiet blue. The palette is scoped to this shell. Sending the draft starts a turn on the desktop Session. Steps follow that Session's `todo/write` list, or each turn when the list is absent. The trace follows `tool/call` and `tool/result`. The code column shows text from `write`, `edit`, and an `apply_patch` add-file. Dragging the boundary, or pressing Left or Right on it, changes the workflow width. The width stays inside the measured shell and leaves at least 200px for the code column when the shell is wide enough, including the desktop minimum window of 520px. The workflow header and the editor tab bar are macOS window-drag rows. This is Session activity, not the workflow engine.
 
 -----
 
@@ -35,7 +35,7 @@ The shell is a light workbench: a session rail, a workflow column, and a code co
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-One registration fills the `workbench` slot declared by ui-layout and registers the `workbench` locale. The component measures its own box and clamps the workflow track to the space that remains after the 56px rail and the code column's floor.
+One registration fills the `workbench` slot declared by ui-layout and registers the `workbench` locale. It follows the Session this composer started, or the Session retained as the desktop main view, and folds that Session's event window into the shell. The component measures its own box and clamps the workflow track to the space that remains after the 56px rail and the code column's floor.
 
 </details>
 
@@ -51,7 +51,7 @@ One registration fills the `workbench` slot declared by ui-layout and registers 
 <a id="model-experience"></a>
 ## Model Experience
 
-None. The shell is static presentation and does not reach a model request.
+The composer sends the draft as one ordinary user message on the current desktop Session. It adds no prompt section of its own.
 
 #### KV Cache effect
 
@@ -61,9 +61,8 @@ None. This package neither assembles nor sends a provider request.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-These limits are the current shell. They are not a backlog of live trajectory wiring.
-
-- **Steps, the trace, and the editor file are placeholders** — the draft is local to the page, and the rail icons do not open other pages.
+- **The rail icons do not open other pages**, and the attachment button does not attach a file.
+- **The code column is the text carried by the Session's write and edit calls** — it does not read the workspace filesystem on its own, and it does not apply every `apply_patch` update hunk.
 
 <a id="dev-note"></a>
 ### Dev Note

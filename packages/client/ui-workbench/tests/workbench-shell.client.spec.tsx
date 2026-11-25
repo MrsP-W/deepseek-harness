@@ -2,8 +2,17 @@
 /** Static desktop workbench shell: both columns, draft field, and column resize. */
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { WorkbenchView } from '../src/client/activity.ts'
 import { zh } from '../src/client/locales/workbench.ts'
 import { WorkbenchShell, type WorkbenchText } from '../src/client/WorkbenchShell.tsx'
+
+const idle: WorkbenchView = {
+  steps: [{ id: 'waiting', title: '', status: 'waiting' }],
+  trace: [],
+  file: null,
+  sending: false,
+  failed: false,
+}
 
 const t: WorkbenchText = (key, params) => {
   const template = zh[key]
@@ -47,46 +56,118 @@ function installMeasurement(): void {
 describe('WorkbenchShell', () => {
   afterEach(() => { cleanup() })
 
-  function mount() {
+  function mount(view: WorkbenchView = idle, send: (text: string) => Promise<boolean> = () => Promise.resolve(true)) {
     installPointerCapture()
     installMeasurement()
-    const view = render(<WorkbenchShell t={t} />)
-    const handle = view.getByRole('separator', { name: zh['resize.label'] })
-    return { ...view, handle }
+    const rendered = render(<WorkbenchShell t={t} useActivity={selector => selector(view)} send={send} />)
+    const handle = rendered.getByRole('separator', { name: zh['resize.label'] })
+    return { ...rendered, handle }
   }
 
-  it('shows the rail, workflow steps, trace, and placeholder file together', () => {
-    const { getByRole, getByLabelText } = mount()
+  it('shows the rail, an empty workflow, and sends a draft', async () => {
+    const send = vi.fn(() => Promise.resolve(true))
+    const { getByRole, getByLabelText } = mount(idle, send)
     expect(getByRole('navigation', { name: zh['rail.label'] }).querySelector('[aria-current="page"]')?.getAttribute('aria-label'))
       .toBe(zh['rail.workflow'])
     expect(getByRole('heading', { name: zh['section.workflow'] })).toBeTruthy()
     expect(getByRole('heading', { name: zh['section.trajectory'] })).toBeTruthy()
-    const active = document.querySelector('[data-workbench-step="implement"]')
-    expect(active?.getAttribute('data-status')).toBe('active')
-    expect(active?.textContent).toContain('正在写入 src/lib/split.ts')
-    expect(document.querySelector('[data-workbench-step="test"]')?.getAttribute('data-status')).toBe('waiting')
-    expect(document.querySelector('[data-workbench-step="test"]')?.textContent).not.toContain(':')
-    expect(document.querySelector('[data-workbench-trace="edit"]')?.textContent).toContain('行 18-42')
-    expect(document.querySelector('[data-workbench-trace="create"]')?.textContent).toContain('write')
-    expect(document.querySelector('[data-workbench-trace="todo"]')?.textContent).toContain(zh['trajectory.todo'])
-    expect(getByLabelText(zh['editor.label']).textContent).toContain('src/lib/split.ts')
-    expect(getByLabelText(zh['editor.label']).textContent).toContain("throw new Error('amount')")
-    expect(getByLabelText(zh['editor.label']).textContent).toContain(zh['editor.written'])
-    expect(getByLabelText(zh['editor.label']).textContent).toContain('Ln 18, Col 1')
+    expect(document.querySelector('[data-workbench-step="waiting"]')?.textContent).toContain(zh['step.waiting.title'])
+    expect(getByLabelText(zh['editor.label']).textContent).toContain(zh['editor.empty'])
     expect(document.querySelectorAll('[data-window-drag]')).toHaveLength(2)
     expect(document.querySelector('[data-dsh-workbench]')).not.toBeNull()
-    expect(getByLabelText(zh['editor.label']).textContent).toContain('split.ts')
     const draft = getByRole('textbox', { name: zh['composer.label'] }) as HTMLTextAreaElement
-    expect(draft.placeholder).toBe(zh['composer.placeholder'])
-    const send = () => getByRole('button', { name: zh['composer.send'] }) as HTMLButtonElement
-    expect(send().disabled).toBe(true)
+    const button = () => getByRole('button', { name: zh['composer.send'] }) as HTMLButtonElement
+    expect(button().disabled).toBe(true)
     fireEvent.change(draft, { target: { value: '  ' } })
-    expect(send().disabled).toBe(true)
+    expect(button().disabled).toBe(true)
     fireEvent.change(draft, { target: { value: '继续补测试' } })
-    expect(send().disabled).toBe(false)
-    fireEvent.click(getByRole('button', { name: zh['composer.send'] }))
-    fireEvent.click(getByRole('button', { name: zh['composer.attach'] }))
-    expect(draft.value).toBe('继续补测试')
+    expect(button().disabled).toBe(false)
+    fireEvent.click(button())
+    expect(send).toHaveBeenCalledExactlyOnceWith('继续补测试')
+    await vi.waitFor(() => { expect(draft.value).toBe('') })
+  })
+
+  it('renders a running step, its trace, and the file being written', () => {
+    const running: WorkbenchView = {
+      steps: [
+        { id: 'todo-0', title: '编写核心模块', status: 'active', detail: 'writing', path: 'src/lib/split.ts' },
+        { id: 'todo-1', title: '补充测试', status: 'waiting' },
+      ],
+      trace: [{ id: 'edit', kind: 'edit', action: 'edit', path: 'src/lib/split.ts', lines: '18-42', time: '14:32:05', status: 'running' }],
+      file: {
+        path: 'src/lib/split.ts',
+        crumbs: ['src', 'lib', 'split.ts'],
+        badge: 'TS',
+        lines: ["throw new Error('amount')"],
+        annotated: [1],
+        cursorLine: 1,
+        cursorColumn: 1,
+      },
+      sending: false,
+      failed: false,
+    }
+    const { getByLabelText } = mount(running)
+    const active = document.querySelector('[data-workbench-step="todo-0"]')
+    expect(active?.getAttribute('data-status')).toBe('active')
+    expect(active?.textContent).toContain('正在写入 src/lib/split.ts')
+    expect(document.querySelector('[data-workbench-step="todo-1"]')?.textContent).not.toContain(':')
+    expect(document.querySelector('[data-workbench-trace="edit"]')?.textContent).toContain('行 18-42')
+    expect(getByLabelText(zh['editor.label']).textContent).toContain("throw new Error('amount')")
+    expect(getByLabelText(zh['editor.label']).textContent).toContain(zh['editor.written'])
+    expect(getByLabelText(zh['editor.label']).textContent).toContain('Ln 1, Col 1')
+  })
+
+  it('keeps a refused draft and renders the other step and trace labels', async () => {
+    const send = vi.fn(() => Promise.resolve(false))
+    const view: WorkbenchView = {
+      steps: [
+        { id: 'done', title: '解析需求', status: 'done', time: '14:28' },
+        { id: 'turn-2', title: '', turn: 2, status: 'error', detail: 'editing', path: 'notes' },
+      ],
+      trace: [
+        { id: 'write', kind: 'write', action: 'write', path: 'notes', time: '14:32:09', status: 'done' },
+        { id: 'todo', kind: 'todo_write', action: 'todo', time: '14:32:10', status: 'done' },
+        { id: 'bash', kind: 'bash', action: 'call', time: '14:32:11', status: 'done' },
+        { id: 'bare-edit', kind: 'edit', action: 'edit', path: 'notes', time: '14:32:12', status: 'done' },
+      ],
+      file: {
+        path: 'notes', crumbs: ['notes'], badge: '', lines: ['// note', 'const n = 2'], annotated: [2],
+        cursorLine: 2, cursorColumn: 1,
+      },
+      sending: true,
+      failed: true,
+    }
+    const { getByRole, getByLabelText } = mount(view, send)
+    expect(document.querySelector('[data-workbench-step="turn-2"]')?.textContent).toContain('第 2 轮')
+    expect(document.querySelector('[data-workbench-step="turn-2"]')?.textContent).toContain('正在修改 notes')
+    expect(document.querySelector('[data-workbench-step="turn-2"]')?.textContent).toContain(zh['status.error'])
+    expect(document.querySelector('[data-workbench-trace="todo"]')?.textContent).toContain(zh['trajectory.todo'])
+    expect(document.querySelector('[data-workbench-trace="bash"]')?.textContent).toContain('bash')
+    expect(getByRole('alert').textContent).toBe(zh['composer.failed'])
+    expect(getByLabelText(zh['editor.label']).textContent).not.toContain(zh['editor.written'].repeat(2))
+    const draft = getByRole('textbox', { name: zh['composer.label'] }) as HTMLTextAreaElement
+    fireEvent.change(draft, { target: { value: '留下' } })
+    expect((getByRole('button', { name: zh['composer.send'] }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.keyDown(draft, { key: 'Enter', shiftKey: true })
+    expect(send).not.toHaveBeenCalled()
+    const idleSend = vi.fn(() => Promise.resolve(false))
+    cleanup()
+    const next = mount(idle, idleSend)
+    const nextDraft = next.getByRole('textbox', { name: zh['composer.label'] }) as HTMLTextAreaElement
+    fireEvent.keyDown(nextDraft, { key: 'Enter' })
+    fireEvent.change(nextDraft, { target: { value: '留下' } })
+    fireEvent.keyDown(nextDraft, { key: 'Enter' })
+    await vi.waitFor(() => { expect(idleSend).toHaveBeenCalledExactlyOnceWith('留下') })
+    expect(nextDraft.value).toBe('留下')
+    cleanup()
+    let accept: (value: boolean) => void = () => {}
+    const racing = mount(idle, () => new Promise(resolve => { accept = resolve }))
+    const racingDraft = racing.getByRole('textbox', { name: zh['composer.label'] }) as HTMLTextAreaElement
+    fireEvent.change(racingDraft, { target: { value: '先写' } })
+    fireEvent.keyDown(racingDraft, { key: 'Enter' })
+    fireEvent.change(racingDraft, { target: { value: '先写更多' } })
+    accept(true)
+    await vi.waitFor(() => { expect(racingDraft.value).toBe('先写更多') })
   })
 
   it('resizes the workflow column from the pointer and the keyboard', () => {
@@ -156,7 +237,7 @@ describe('WorkbenchShell', () => {
   it('keeps the preferred width until the shell is measured', () => {
     vi.stubGlobal('ResizeObserver', undefined)
     installPointerCapture()
-    const view = render(<WorkbenchShell t={t} />)
+    const view = render(<WorkbenchShell t={t} useActivity={selector => selector(idle)} send={() => Promise.resolve(true)} />)
     const handle = view.getByRole('separator', { name: zh['resize.label'] })
     expect(handle.getAttribute('aria-valuenow')).toBe('440')
     expect(handle.getAttribute('aria-valuemin')).toBe('0')

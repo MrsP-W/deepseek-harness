@@ -218,6 +218,7 @@
 .stepTitle {
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
   font-weight: 500;
 }
 
@@ -279,8 +280,7 @@
 
 .composer {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
   flex: none;
   margin: 12px 28px 20px;
   padding: 10px 10px 10px 16px;
@@ -289,6 +289,19 @@
   background: var(--dsw-specific-input-major);
   box-shadow: var(--dsw-elevation-soft);
   --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
+}
+
+.composerRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.composerError {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .draft {
@@ -368,6 +381,12 @@
   min-width: 0;
   min-height: 0;
   background: var(--dsw-alias-markdown-code-block);
+}
+
+.empty {
+  margin: 0;
+  padding: 48px 28px;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .tabBar {
