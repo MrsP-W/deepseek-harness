@@ -33,6 +33,7 @@ export interface LogDraft {
   sawMeta: boolean
   steps: MonitorStep[]
   files: MonitorFile[]
+  reads: { path: string; name: string; content: string }[]
   terminal: boolean
 }
 
@@ -156,7 +157,53 @@ function argContent(args: Record<string, unknown>): string {
   return textOf(args.Content) || textOf(args.content) || textOf(args.contents) || textOf(args.new_string)
 }
 
-function addTool(draft: LogDraft, name: string, args: Record<string, unknown>, at: number, status: MonitorStatus, id: string): void {
+function firstFilled(read: (key: string) => string, keys: readonly string[]): string {
+  for (const key of keys) {
+    const value = read(key)
+    if (value !== '') return value
+  }
+  return ''
+}
+
+function argOld(args: Record<string, unknown>): string {
+  return firstFilled(key => textOf(args[key]), ['old_string', 'old_content'])
+}
+
+function clipText(value: string): string {
+  return value.length > 80_000 ? value.slice(0, 80_000) : value
+}
+
+function outputText(value: unknown): string {
+  if (typeof value === 'string') return value
+  const body = record(value)
+  if (body === undefined) return ''
+  return firstFilled(key => textOf(body[key]), ['text', 'content', 'output'])
+}
+
+function rememberRead(draft: LogDraft, path: string, content: string): void {
+  if (content === '') return
+  const next = { path, name: fileName(path), content: clipText(content) }
+  const index = draft.reads.findIndex(item => item.path === path)
+  if (index >= 0) draft.reads[index] = next
+  else draft.reads.push(next)
+}
+
+function conversationTitle(payload: Record<string, unknown>): string {
+  for (const key of ['title', 'name', 'thread_name', 'thread_title']) {
+    const value = textOf(payload[key])
+    if (value !== '') return value
+  }
+  return ''
+}
+
+function usableTitle(value: string): boolean {
+  const trimmed = value.trim()
+  return trimmed !== '' && !/\.jsonl$/iu.test(trimmed) && !trimmed.includes('/') && !trimmed.includes('\\')
+}
+
+function addTool(
+  draft: LogDraft, name: string, args: Record<string, unknown>, at: number, status: MonitorStatus, id: string, captured = '',
+): void {
   const action = toolAction(name)
   if (action === undefined) return
   if (action === 'command') {
@@ -168,6 +215,11 @@ function addTool(draft: LogDraft, name: string, args: Record<string, unknown>, a
   const path = argPath(args)
   if (path === '') return
   pushStep(draft, { id, at, action, label: path, status })
+  if (action === 'read') {
+    const readText = argContent(args)
+    rememberRead(draft, path, readText !== '' ? readText : captured)
+  }
+  if (action === 'edit') rememberRead(draft, path, argOld(args))
   rememberContent(draft, path, argContent(args))
 }
 
@@ -194,6 +246,8 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
     draft.sawMeta = true
     draft.metaId = textOf(payload.id) || textOf(payload.session_id)
     draft.cwd = textOf(payload.cwd) || draft.cwd
+    const named = conversationTitle(payload)
+    if (usableTitle(named)) draft.title = firstLine(named)
     const parent = parentFromMeta(payload)
     if (parent !== '' && parent !== draft.metaId) {
       draft.parentMetaId = parent
@@ -212,7 +266,7 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
     const message = textOf(payload.message) || textOf(payload.content) || textOf(payload.text)
     if (message !== '' && draft.prompt === '') {
       draft.prompt = message
-      draft.title = firstLine(message)
+      if (!usableTitle(draft.title)) draft.title = firstLine(message)
     }
     return
   }
@@ -233,6 +287,10 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
     const classified = classifyCommand(command)
     const failed = payload.exit_code !== undefined && payload.exit_code !== 0
     pushStep(draft, { id: `${draft.id}:${sequence}`, at, action: classified.action, label: classified.label, status: failed ? 'error' : 'done' })
+    if (classified.action === 'read') {
+      const stdout = firstFilled(key => outputText(payload[key]), ['stdout', 'aggregated_output', 'output'])
+      if (stdout !== '') rememberRead(draft, classified.label, stdout)
+    }
     return
   }
   if (kind === 'patch_apply_end' || kind === 'file_change' || kind === 'FileChange') {
@@ -247,6 +305,12 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
     }
     return
   }
+  if (new Set(['function_call_output', 'custom_tool_call_output', 'tool_result']).has(kind)) {
+    const output = firstFilled(key => outputText(payload[key]), ['output', 'content', 'result'])
+    const lastRead = [...draft.steps].reverse().find(step => step.action === 'read')
+    if (output !== '' && lastRead !== undefined) rememberRead(draft, lastRead.label, output)
+    return
+  }
   if (kind === 'function_call' || kind === 'custom_tool_call' || kind === 'tool_call') {
     const name = textOf(payload.name)
     const raw = payload.arguments ?? payload.input ?? payload.args
@@ -258,9 +322,11 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
 function applyAntigravity(draft: LogDraft, value: Record<string, unknown>, at: number, sequence: number): void {
   const content = textOf(value.content)
   const source = textOf(value.source).toUpperCase()
+  const named = conversationTitle(value)
+  if (usableTitle(named)) draft.title = firstLine(named)
   if ((source === 'USER' || textOf(value.type) === 'user') && content !== '' && draft.prompt === '') {
     draft.prompt = content
-    draft.title = firstLine(content)
+    if (!usableTitle(draft.title)) draft.title = firstLine(content)
   }
   const statusText = textOf(value.status).toUpperCase()
   const status: MonitorStatus = statusText === 'RUNNING' ? 'running' : statusText === 'ERROR' ? 'error' : 'done'
@@ -272,7 +338,8 @@ function applyAntigravity(draft: LogDraft, value: Record<string, unknown>, at: n
     if (body === undefined) return
     const name = textOf(body.name) || textOf(body.tool)
     const args = record(body.args) ?? record(body.arguments) ?? body
-    addTool(draft, name, args, at, status, `${draft.id}:${sequence}:${index}`)
+    const captured = firstFilled(key => textOf(body[key]), ['result', 'output'])
+    addTool(draft, name, args, at, status, `${draft.id}:${sequence}:${index}`, captured)
   })
 }
 
@@ -306,6 +373,7 @@ export function createDraft(source: LogSource): LogDraft {
     sawMeta: false,
     steps: [],
     files: [],
+    reads: [],
     terminal: false,
   }
 }
@@ -358,6 +426,7 @@ export function publishDrafts(drafts: readonly LogDraft[], now: number): { sessi
       ...(parentId !== undefined ? { parentId } : {}),
       steps: draft.steps,
       files: draft.files.map(file => ({ ...file, fresh: file.fresh || now - file.at < 20_000 })),
+      ...(draft.reads.length > 0 ? { reads: draft.reads } : {}),
     }
   })
   sessions.sort((left, right) => right.startedAt - left.startedAt)

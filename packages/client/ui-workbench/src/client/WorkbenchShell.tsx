@@ -190,14 +190,26 @@ function isLogName(name: string): boolean {
   return /\.jsonl$/iu.test(name) || /^rollout-/iu.test(name)
 }
 
-/** Project folder, else a human title. Log filenames are never shown as the name. */
+function usableName(value: string): boolean {
+  const trimmed = value.trim()
+  return trimmed !== '' && !isLogName(trimmed) && !trimmed.includes('/') && !trimmed.includes('\\')
+}
+
+/** Conversation title, else the prompt, else the project folder. Log filenames are never shown. */
 function displayName(session: MonitorSession): string {
+  if (usableName(session.title)) return session.title.trim()
+  const head = session.prompt.replace(/\n[\s\S]*/u, '').trim()
+  if (usableName(head)) return head.slice(0, 80)
   const folder = pathTail(session.cwd)
   if (folder !== '' && !isLogName(folder)) return folder
-  if (session.title !== '' && !isLogName(session.title)) return session.title
-  const head = session.prompt.replace(/\n[\s\S]*/u, '').trim()
-  if (head !== '' && !isLogName(head)) return head.slice(0, 48)
   return session.agent === 'codex' ? 'Codex' : 'Antigravity'
+}
+
+/** Final filename when a label is a path. Commands stay as written. */
+function labelName(label: string): string {
+  const trimmed = label.trim()
+  if (!trimmed.includes('/') && !trimmed.includes('\\')) return trimmed
+  return pathTail(trimmed) || trimmed
 }
 
 type SessionLane = 'running' | 'waiting' | 'idle' | 'expired'
@@ -326,6 +338,9 @@ function MonitorBoard({
   const tops = sessions.filter(session => session.parentId === undefined
     || !sessions.some(parent => parent.id === session.parentId))
   const current = selected?.steps.at(-1)
+  const reads = selected?.reads ?? []
+  const activeRead = reads.find(item => item.path === file?.path) ?? reads.at(-1)
+  const hasInput = (selected?.prompt ?? '') !== '' || (activeRead !== undefined && activeRead.content !== '')
   const catalogTops = catalog.filter(session => session.parentId === undefined
     || !catalog.some(parent => parent.id === session.parentId))
   const byLane = (lane: SessionLane) => catalogTops.filter(session => laneOf(session, now) === lane)
@@ -374,7 +389,7 @@ function MonitorBoard({
             <div className={css.nowBox}>
               <p className={css.nowLabel}>{t('monitor.step')}</p>
               <p className={css.nowCmd}>
-                {current === undefined ? t('monitor.elapsed.none') : `${t(actionKey(current.action))}  ${current.label}`}
+                {current === undefined ? t('monitor.elapsed.none') : `${t(actionKey(current.action))}  ${labelName(current.label)}`}
               </p>
               {selected.prompt !== '' && <p className={css.nowDesc}>{selected.prompt}</p>}
             </div>
@@ -394,7 +409,7 @@ function MonitorBoard({
                       data-workbench-open-file={item.path}
                       onClick={() => onOpenFile(item.path)}
                     >
-                      <span className={css.fileBarName}>{item.path}</span>
+                      <span className={css.fileBarName}>{item.name || labelName(item.path)}</span>
                       <span className={css.barTrack}>
                         <i className={item.fresh ? css.barHot : css.barFill} style={{ width: `${Math.round((lines / widest) * 100)}%` }} />
                       </span>
@@ -431,36 +446,52 @@ function MonitorBoard({
         </div>
       </article>
       <article className={css.outputCard} data-monitor-region="output" aria-label={t('editor.label')}>
-        <div className={css.outputHead}>
-          <h3 className={css.cardHeading}>{t('monitor.output')}</h3>
-          {file !== null && file.annotated.length > 0 && (
-            <span className={css.streaming}>{t('monitor.streaming')}</span>
-          )}
+        <h3 className={css.cardHeading}>{t('monitor.output')}</h3>
+        <div className={css.ioSplit}>
+          <section className={css.ioPane} data-monitor-pane="input">
+            <h4 className={css.ioLabel}>{t('monitor.input')}</h4>
+            {selected !== undefined && selected.prompt !== '' && <p className={css.ioPrompt}>{selected.prompt}</p>}
+            {activeRead !== undefined && activeRead.content !== '' && (
+              <>
+                <p className={css.ioFile}>{activeRead.name || labelName(activeRead.path)}</p>
+                <pre className={css.previewCode}>{activeRead.content}</pre>
+              </>
+            )}
+            {!hasInput && <p className={css.empty}>{t('monitor.inputEmpty')}</p>}
+          </section>
+          <section className={css.ioPane} data-monitor-pane="output">
+            <div className={css.outputHead}>
+              <h4 className={css.ioLabel}>{t('monitor.outputPane')}</h4>
+              {file !== null && file.annotated.length > 0 && (
+                <span className={css.streaming}>{t('monitor.streaming')}</span>
+              )}
+            </div>
+            {files.length > 0 && (
+              <div className={css.tabs} role="tablist" aria-label={t('editor.tabs')}>
+                {files.map(item => (
+                  <button
+                    key={item.path}
+                    type="button"
+                    role="tab"
+                    className={css.tab}
+                    aria-selected={file?.path === item.path}
+                    onClick={() => onOpenFile(item.path)}
+                  >
+                    {fileName(item)}
+                  </button>
+                ))}
+              </div>
+            )}
+            {file === null ? <p className={css.empty}>{t('monitor.outputEmpty')}</p> : (
+              <pre className={css.previewCode}>
+                {file.lines.map((line, index) => {
+                  const live = file.annotated.includes(index + 1)
+                  return <span key={index} className={live ? css.liveLine : undefined}>{line}{'\n'}</span>
+                })}
+              </pre>
+            )}
+          </section>
         </div>
-        {files.length > 0 && (
-          <div className={css.tabs} role="tablist" aria-label={t('editor.tabs')}>
-            {files.map(item => (
-              <button
-                key={item.path}
-                type="button"
-                role="tab"
-                className={css.tab}
-                aria-selected={file?.path === item.path}
-                onClick={() => onOpenFile(item.path)}
-              >
-                {fileName(item)}
-              </button>
-            ))}
-          </div>
-        )}
-        {file === null ? <p className={css.empty}>{t('monitor.nofile')}</p> : (
-          <pre className={css.previewCode}>
-            {file.lines.map((line, index) => {
-              const live = file.annotated.includes(index + 1)
-              return <span key={index} className={live ? css.liveLine : undefined}>{line}{'\n'}</span>
-            })}
-          </pre>
-        )}
       </article>
       <section className={css.listCard} data-monitor-region="sessions" data-view={viewMode}>
         <div className={css.cardHead}>
@@ -572,7 +603,7 @@ function MonitorBoard({
                   <time className={css.traceTime}>{clock(step.at)}</time>
                   <span className={css.sessionTitle}>{displayName(session)}</span>
                   <span className={css.kind}>{t(actionKey(step.action))}</span>
-                  <span className={css.traceBody}>{step.label}</span>
+                  <span className={css.traceBody}>{labelName(step.label)}</span>
                 </>
               )
               return (

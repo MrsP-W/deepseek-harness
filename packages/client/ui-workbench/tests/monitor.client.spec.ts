@@ -70,6 +70,86 @@ describe('Codex and Antigravity folds', () => {
     expect(replaced.surface).toBe('cli')
     expect(replaced.steps[0]?.action).toBe('edit')
   })
+
+  it('keeps the conversation title, read text, and the text before an edit', () => {
+    const titled = (title: string, message: string) => {
+      const draft = createDraft({ path: `/tmp/rollout-${PARENT}.jsonl`, product: 'codex' })
+      ingestLines(draft, [
+        line({
+          type: 'session_meta',
+          payload: { id: PARENT, cwd: '/Projects/taskmarket-tsk-brk611an', title, originator: 'Codex Desktop' },
+        }),
+        line({ type: 'event_msg', payload: { type: 'user_message', message } }),
+      ].join(''), NOW)
+      return draft.title
+    }
+    expect(titled('补同步监听', '请改 app.js')).toBe('补同步监听')
+    expect(titled('notes.jsonl', '请改 app.js')).toBe('请改 app.js')
+    expect(titled('/tmp/x', '请改 app.js')).toBe('请改 app.js')
+    expect(titled('C:\\temp', '请改 app.js')).toBe('请改 app.js')
+    const named = createDraft({ path: `/tmp/rollout-${PARENT}.jsonl`, product: 'codex' })
+    ingestLines(named, line({ type: 'session_meta', payload: { id: PARENT, name: '从名字来' } }), NOW)
+    expect(named.title).toBe('从名字来')
+    const draft = createDraft({ path: `/tmp/rollout-${CHILD}.jsonl`, product: 'codex' })
+    const file = '/Users/wei/Documents/CodexProjects/demo/public/app.js'
+    ingestLines(draft, [
+      line({ type: 'session_meta', payload: { id: CHILD, cwd: '/Projects/taskmarket-tsk-brk611an', thread_name: '补同步监听' } }),
+      line({ type: 'event_msg', payload: { type: 'user_message', message: '请改 app.js' } }),
+      line({ type: 'response_item', payload: { type: 'function_call', name: 'read_file', arguments: JSON.stringify({ path: file }) } }),
+      line({ type: 'response_item', payload: { type: 'function_call_output', output: 1 } }),
+      line({ type: 'response_item', payload: { type: 'function_call_output', output: {} } }),
+    ].join(''), NOW)
+    expect(draft.title).toBe('补同步监听')
+    expect(draft.prompt).toBe('请改 app.js')
+    expect(draft.reads).toEqual([])
+    ingestLines(draft, line({ type: 'response_item', payload: { type: 'function_call_output', output: { text: 'from text\n' } } }), NOW)
+    expect(draft.reads[0]?.content).toBe('from text\n')
+    expect(draft.reads[0]?.name).toBe('app.js')
+    ingestLines(draft, line({ type: 'response_item', payload: { type: 'tool_result', output: '' } }), NOW)
+    expect(draft.reads[0]?.content).toBe('from text\n')
+    ingestLines(draft, line({
+      type: 'response_item',
+      payload: {
+        type: 'function_call',
+        name: 'edit',
+        arguments: JSON.stringify({ path: file, old_string: 'const before = 1', new_string: 'const after = 2\n' }),
+      },
+    }), NOW)
+    expect(draft.reads[0]?.content).toBe('const before = 1')
+    expect(draft.files[0]?.content).toContain('const after')
+    ingestLines(draft, line({
+      type: 'event_msg',
+      payload: { type: 'exec_command_end', command: `cat ${file}`, aggregated_output: 'const before = 1\n', exit_code: 0 },
+    }), NOW)
+    expect(draft.reads[0]?.content).toBe('const before = 1\n')
+    const long = 'x'.repeat(80_001)
+    ingestLines(draft, line({
+      type: 'response_item',
+      payload: { type: 'function_call', name: 'read_file', arguments: JSON.stringify({ path: 'long.js', content: long }) },
+    }), NOW)
+    expect(draft.reads.find(item => item.name === 'long.js')?.content).toHaveLength(80_000)
+    const published = publishDrafts([draft], NOW)
+    expect(published.sessions[0]?.reads?.[0]?.name).toBe('app.js')
+    const writeOnly = createDraft({ path: '/tmp/rollout-write.jsonl', product: 'codex' })
+    ingestLines(writeOnly, [
+      line({
+        type: 'response_item',
+        payload: { type: 'function_call', name: 'write', arguments: JSON.stringify({ path: 'a.ts', content: 'z\n' }) },
+      }),
+      line({ type: 'response_item', payload: { type: 'custom_tool_call_output', output: 'should not attach\n' } }),
+    ].join(''), NOW)
+    expect(writeOnly.reads).toEqual([])
+    const ag = createDraft({ path: '/brain/conv/.system_generated/logs/transcript_full.jsonl', product: 'antigravity' })
+    ingestLines(ag, line({
+      source: 'USER', content: '请改 app.js', title: '监听任务', tool_calls: [
+        { name: 'view_file', args: { AbsolutePath: file }, result: '# read\n' },
+        { name: 'replace_file_content', args: { TargetFile: 'src/cli.ts', old_content: 'legacy\n', new_string: 'next\n' } },
+      ],
+    }), NOW)
+    expect(ag.title).toBe('监听任务')
+    expect(ag.reads.map(item => item.content)).toEqual(['# read\n', 'legacy\n'])
+    expect(ag.files[0]?.content).toContain('next')
+  })
 })
 
 describe('more log shapes', () => {

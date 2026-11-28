@@ -850,11 +850,40 @@
   gap: 8px;
 }
 
+.shell[data-monitor] .traceRow,
+.shell[data-monitor] .traceOpen {
+  display: grid;
+  grid-template-columns: 52px minmax(72px, 1.2fr) auto minmax(48px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .shell[data-monitor] .traceRow {
   padding: 10px 12px;
   border-radius: var(--dsw-radius-md);
   background: var(--dsh-mon-card);
   box-shadow: var(--dsw-elevation-soft);
+}
+
+.shell[data-monitor] .traceRow:has(.traceOpen) {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.shell[data-monitor] .traceOpen {
+  width: 100%;
+  padding: 10px 12px;
+}
+
+.shell[data-monitor] .traceBody,
+.shell[data-monitor] .eventCard .sessionTitle {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
 }
 
 .shell[data-monitor] .traceRow.traceLive {
@@ -994,7 +1023,50 @@
 }
 
 .highlight { grid-column: 1; grid-row: 1; }
-.outputCard { grid-column: 2; grid-row: 1; }
+.outputCard {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.ioSplit {
+  display: grid;
+  grid-template-rows: minmax(72px, 1fr) minmax(72px, 1fr);
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.ioPane {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ioLabel {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.ioPrompt,
+.ioFile {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.ioPrompt { white-space: pre-wrap; }
+
+.ioFile {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
 .listCard { grid-column: 1; grid-row: 2; }
 .eventCard { grid-column: 2; grid-row: 2; }
 
@@ -1119,6 +1191,14 @@
   background: var(--dsh-mon-ground);
 }
 
+:global(html[data-platform='darwin']:not([data-fullscreen])) .shell[data-monitor] .rail {
+  padding-top: calc(var(--dsh-frame-top-clearance, 48px) + 16px);
+}
+
+:global(html[data-platform='darwin']:not([data-fullscreen])) .shell[data-monitor] .workflowHead {
+  padding-top: calc(var(--dsh-frame-top-clearance, 48px) + 10px);
+}
+
 .mark {
   display: grid;
   place-items: center;
@@ -1216,11 +1296,14 @@
 .nowCmd {
   margin: 4px 0 0;
   padding: 6px 8px;
+  overflow: hidden;
   border-radius: var(--dsw-radius-sm);
   background: var(--dsh-mon-card);
   font-family: var(--ds-font-family-code);
   font-size: 13px;
   line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .nowDesc { margin-top: 4px; }
@@ -1380,20 +1463,33 @@
 }
 
 .boardColumns {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
   gap: 8px;
+  overflow: auto;
+}
+
+.boardColumns > div {
+  flex: 1 0 360px;
+  min-width: 360px;
 }
 
 .listCard .session {
   display: grid;
-  grid-template-columns: 12px minmax(0, 1.2fr) .7fr .9fr .6fr .55fr;
+  grid-template-columns: 12px minmax(72px, 1.4fr) minmax(52px, .7fr) minmax(64px, .9fr) minmax(44px, .6fr) minmax(48px, .55fr);
   align-items: center;
   gap: 6px;
   padding: 6px 4px;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
   box-shadow: none;
+}
+
+.listCard .session > * {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
 }
 
 .laneDot {

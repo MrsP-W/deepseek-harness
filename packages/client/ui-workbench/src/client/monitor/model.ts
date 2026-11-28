@@ -45,6 +45,16 @@ export interface MonitorFile {
   readonly at: number
 }
 
+/** Text the session read, or the file text before an edit. */
+export interface MonitorRead {
+  /** Path from the log. The label uses only the final filename. */
+  readonly path: string
+  /** Final filename. */
+  readonly name: string
+  /** Read result or pre-edit text captured from the log. */
+  readonly content: string
+}
+
 /** One local agent session, including a nested subagent. */
 export interface MonitorSession {
   /** Product-scoped identity. */
@@ -69,6 +79,8 @@ export interface MonitorSession {
   readonly steps: readonly MonitorStep[]
   /** Files touched by write or edit steps. */
   readonly files: readonly MonitorFile[]
+  /** Read results and pre-edit text. Omitted when the log has none. */
+  readonly reads?: readonly MonitorRead[]
 }
 
 /** The page's current local picture. */

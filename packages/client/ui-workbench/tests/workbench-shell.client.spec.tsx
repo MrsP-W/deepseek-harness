@@ -138,20 +138,31 @@ describe('WorkbenchShell', () => {
             { id: 'later', at: Date.now() + 60_000, action: 'read', label: 'later', status: 'done' },
             { id: 'edit', at: 3, action: 'edit', label: 'src/sync/manifest.ts', status: 'done' },
             { id: 'write', at: 4, action: 'write', label: 'src/sync/watcher.ts', status: 'running' },
+            { id: 'abs', at: 2, action: 'edit', label: '/Users/wei/Documents/CodexProjects/demo/public/app.js', status: 'done' },
           ],
           files: [
             { path: 'src/sync/watcher.ts', name: 'watcher.ts', content: 'export const watcher = true\n', fresh: true, action: 'write', at: 4 },
             { path: '/', name: 'README', content: 'plain\n', fresh: false, action: 'write', at: 1 },
             { path: 'empty.ts', name: 'empty.ts', content: '', fresh: false, action: 'edit', at: 1 },
+            {
+              path: '/Users/wei/Documents/CodexProjects/demo/public/app.js', name: 'app.js',
+              content: 'export const app = 1\n', fresh: false, action: 'edit', at: 2,
+            },
           ],
+          reads: [{
+            path: '/Users/wei/Documents/CodexProjects/demo/public/app.js', name: 'app.js', content: 'export const before = 0\n',
+          }],
         },
         {
           id: 'ag:cli', agent: 'antigravity', surface: 'cli', title: 'transcript_full.jsonl',
-          cwd: '', startedAt: Date.now() - 60_000, status: 'error', prompt: '', steps: [], files: [],
+          cwd: '/var/notes.jsonl', startedAt: Date.now() - 60_000, status: 'error', prompt: '', steps: [], files: [],
         },
         {
           id: 'codex:exec', agent: 'codex', surface: 'exec', title: '命令行检查',
-          cwd: '', startedAt: Date.now() - 2 * 60 * 60 * 1000, status: 'done', prompt: '', steps: [], files: [],
+          cwd: '', startedAt: Date.now() - 2 * 60 * 60 * 1000, status: 'done', prompt: '',
+          steps: [{ id: 'win', at: 1, action: 'read', label: 'C:\\src\\app.js', status: 'done' }],
+          files: [{ path: 'C:\\src\\app.js', name: '', content: 'export const win = 1\n', fresh: false, action: 'edit', at: 1 }],
+          reads: [{ path: 'C:\\src\\app.js', name: '', content: 'export const readwin = 1\n' }],
         },
         {
           id: 'codex:1', agent: 'codex', surface: 'desktop', title: '为 aurora-sync 补充单元测试',
@@ -160,11 +171,17 @@ describe('WorkbenchShell', () => {
         },
         {
           id: 'codex:soon', agent: 'codex', surface: 'desktop', title: 'rollout-2026.jsonl',
-          cwd: '', startedAt: Date.now() + 10_000, status: 'done', prompt: 'notes.jsonl', steps: [], files: [],
+          cwd: '/Projects/taskmarket-tsk-brk611an', startedAt: Date.now() + 10_000, status: 'done', prompt: '',
+          steps: [], files: [], reads: [{ path: 'plain.ts', name: 'plain.ts', content: '' }],
         },
         {
           id: 'codex:child', agent: 'codex', surface: 'subagent', title: 'transcript_full.jsonl',
           cwd: '', startedAt: 3, status: 'running', prompt: '补齐类型\n更多', parentId: 'codex:1', steps: [], files: [],
+        },
+        {
+          id: 'codex:bare', agent: 'codex', surface: 'desktop', title: '',
+          cwd: '', startedAt: 1, status: 'done', prompt: '',
+          steps: [{ id: 'slash', at: 1, action: 'read', label: '/', status: 'done' }], files: [],
         },
       ],
     }
@@ -182,17 +199,25 @@ describe('WorkbenchShell', () => {
     )
     expect(view.getByRole('heading', { name: zh['monitor.title'] })).toBeTruthy()
     expect(view.getByText(zh['monitor.mark'])).toBeTruthy()
-    expect(view.getByText(/正在监控 6 个会话/u)).toBeTruthy()
+    expect(view.getByText(/正在监控 7 个会话/u)).toBeTruthy()
     expect(view.getByText(zh['monitor.readonly'])).toBeTruthy()
-    expect(view.getAllByText('aurora-sync').length).toBeGreaterThan(0)
+    expect(view.getByRole('heading', { level: 3, name: '给 aurora-sync 加上本机文件监听' })).toBeTruthy()
     expect(view.getByText(zh['monitor.streaming'])).toBeTruthy()
-    expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const watcher = true')
+    const editor = view.getByLabelText(zh['editor.label'])
+    expect(editor.textContent).toContain(zh['monitor.input'])
+    expect(editor.textContent).toContain('给 aurora-sync 加上本机文件监听')
+    expect(editor.textContent).toContain('export const before = 0')
+    expect(editor.textContent).toContain(zh['monitor.outputPane'])
+    expect(editor.textContent).toContain('export const watcher = true')
+    expect(document.body.textContent).not.toContain('/Users/wei/Documents')
+    expect(view.getAllByText('app.js').length).toBeGreaterThan(0)
     expect(document.querySelector('[data-monitor-region="highlight"]')).not.toBeNull()
     expect(document.querySelector('[data-monitor-region="events"]')).not.toBeNull()
     expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain('aurora-sync')
     expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain(zh['monitor.origin.ide'])
     expect(document.querySelector('[data-workbench-session="codex:child"]')?.textContent).toContain(zh['monitor.origin.subagent'])
     expect(document.querySelector('[data-workbench-session="codex:exec"]')?.textContent).toContain(zh['monitor.origin.exec'])
+    expect(document.querySelector('[data-workbench-session="codex:soon"]')?.textContent).toContain('taskmarket-tsk-brk611an')
     expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain('Antigravity')
     expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).not.toContain('transcript_full.jsonl')
     expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain(zh['monitor.lane.waiting'])
@@ -217,7 +242,11 @@ describe('WorkbenchShell', () => {
     expect(document.querySelector('[data-workbench-session="ag:1"]')).toBeNull()
     fireEvent.change(view.getByRole('searchbox', { name: zh['monitor.search'] }), { target: { value: '' } })
     fireEvent.click(document.querySelector('[data-workbench-session="ag:cli"]') as Element)
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain(zh['monitor.inputEmpty'])
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain(zh['monitor.outputEmpty'])
     fireEvent.click(document.querySelector('[data-workbench-session="codex:exec"]') as Element)
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const readwin = 1')
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain('app.js')
     fireEvent.click(document.querySelector('[data-workbench-session="codex:1"]') as Element)
     fireEvent.click(document.querySelector('[data-workbench-session="codex:soon"]') as Element)
     fireEvent.click(document.querySelector('[data-workbench-session="codex:child"]') as Element)
