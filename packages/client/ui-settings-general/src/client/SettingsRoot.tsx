@@ -222,10 +222,20 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
     connectionIndicator = 'recovered'
   }
 
-  const openSettings = (sectionId?: string): void => {
+  const openSettings = useCallback((sectionId?: string): void => {
     if (sectionId === undefined) actions.open()
     else actions.openSection(sectionId)
-  }
+  }, [actions])
+
+  useEffect(() => {
+    const onOpen = (event: Event): void => {
+      const sectionId = (event as CustomEvent<{ sectionId?: string }>).detail?.sectionId
+      if (typeof sectionId === 'string' && sectionId !== '') openSettings(sectionId)
+      else openSettings()
+    }
+    window.addEventListener('dsh:open-settings', onOpen)
+    return () => { window.removeEventListener('dsh:open-settings', onOpen) }
+  }, [openSettings])
 
   return (
     <>

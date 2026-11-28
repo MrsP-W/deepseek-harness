@@ -21,6 +21,7 @@ it('serves the Web entry and assets without starting or contacting a Host', asyn
   const response = await serveWebDocument(new Request('dsh-app://app/'), root)
   const html = await response.text()
   expect(html.indexOf('Promise.withResolvers()')).toBeLessThan(html.indexOf('assets/entry.js'))
+  expect(html).toContain('globalThis.__DSH_DESKTOP_WORKBENCH__ = true')
   expect(await (await serveWebDocument(new Request('dsh-app://app/assets/entry.js'), root)).text()).toContain('entryLoaded')
   expect(fetch).not.toHaveBeenCalled()
   expect((await serveWebDocument(new Request('dsh-app://app/%2e%2e%2fprivate'), root)).status).toBe(403)

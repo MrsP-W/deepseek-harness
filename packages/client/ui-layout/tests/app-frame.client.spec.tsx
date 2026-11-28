@@ -7,6 +7,7 @@ import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { AppFrame } from '../src/client/AppFrame.tsx'
+import { isDesktopWorkbenchDocument } from '../src/client/desktop-workbench.ts'
 import type { AppFrameProps } from '../src/client/AppFrame.tsx'
 import type { MainPanelId, RightbarOwnerProps, SidebarOwnerProps } from '../src/client/index.ts'
 import { createLayoutStore } from '../src/client/stores.ts'
@@ -180,6 +181,7 @@ afterEach(() => {
   try {
     cleanup()
   } finally {
+    globalThis.__DSH_DESKTOP_WORKBENCH__ = undefined
     delete document.documentElement.dataset.platform
     for (const restore of restoreProperties.splice(0).reverse()) restore()
     document.title = originalTitle
@@ -795,5 +797,51 @@ describe('sidebar drawer', () => {
     resize(767)
     expect(sidebarOwner().collapsed).toBe(true)
     expect(tracks(frame)).toEqual([0, 0])
+  })
+})
+
+describe('desktop workbench document', () => {
+  it('is marked only by the desktop index', () => {
+    expect(isDesktopWorkbenchDocument()).toBe(false)
+    globalThis.__DSH_DESKTOP_WORKBENCH__ = true
+    expect(isDesktopWorkbenchDocument()).toBe(true)
+  })
+
+  it('renders the workbench slot instead of the three columns', () => {
+    globalThis.__DSH_DESKTOP_WORKBENCH__ = true
+    const { frame, queryByTestId, getByTestId } = mountFrame()
+    expect(frame.hasAttribute('data-workbench')).toBe(true)
+    expect(frame.style.gridTemplateColumns).toBe('')
+    expect(getByTestId('workbench-content')).toBeTruthy()
+    const settingsHost = frame.querySelector('[data-workbench-settings-host]')
+    expect(settingsHost).not.toBeNull()
+    expect(settingsHost?.hasAttribute('hidden')).toBe(true)
+    expect(queryByTestId('sidebar-content')?.closest('[data-workbench-settings-host]')).toBe(settingsHost)
+    expect(queryByTestId('main-content')).toBeNull()
+    const filesHost = frame.querySelector('[data-workbench-files-host]')
+    expect(filesHost).not.toBeNull()
+    expect(filesHost?.hasAttribute('hidden')).toBe(true)
+    expect(queryByTestId('rightbar-content')?.closest('[data-workbench-files-host]')).toBe(filesHost)
+    expect(getByTestId('shell.bottom-content')).toBeTruthy()
+    expect(getByTestId('shell.overlay-content')).toBeTruthy()
+    expect(document.title).toBe('DSH Local Build')
+  })
+
+  it('shows the official sidebar and files hosts when the workbench asks for them', () => {
+    globalThis.__DSH_DESKTOP_WORKBENCH__ = true
+    const { frame, getByTestId, queryByTestId } = mountFrame()
+    const settingsHost = frame.querySelector('[data-workbench-settings-host]') as HTMLElement
+    expect(settingsHost.hasAttribute('hidden')).toBe(true)
+    act(() => { window.dispatchEvent(new CustomEvent('dsh:workbench-sessions', { detail: { open: true } })) })
+    expect(settingsHost.hasAttribute('hidden')).toBe(false)
+    expect(settingsHost.hasAttribute('data-workbench-sessions-open')).toBe(true)
+    expect(frame.querySelector('[data-workbench-sessions-mask]')).not.toBeNull()
+    expect(getByTestId('sidebar-content')).toBeTruthy()
+    act(() => { window.dispatchEvent(new CustomEvent('dsh:workbench-files', { detail: { open: true } })) })
+    const filesHost = frame.querySelector('[data-workbench-files-host]') as HTMLElement
+    expect(filesHost.hasAttribute('hidden')).toBe(false)
+    expect(queryByTestId('rightbar-content')?.closest('[data-workbench-files-host]')).toBe(filesHost)
+    act(() => { window.dispatchEvent(new CustomEvent('dsh:workbench-sessions', { detail: { open: false } })) })
+    expect(settingsHost.hasAttribute('hidden')).toBe(true)
   })
 })

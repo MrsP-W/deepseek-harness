@@ -7,10 +7,11 @@ const MIME: Readonly<Record<string, string>> = {
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json',
   '.woff2': 'font/woff2', '.png': 'image/png', '.ico': 'image/x-icon',
 }
-const BOOT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>'
+const BOOT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers();globalThis.__DSH_DESKTOP_WORKBENCH__ = true</script>'
 
 /**
- * Read an application-owned static asset; the index waits for asynchronous Host injections.
+ * Read an application-owned static asset; the index waits for asynchronous Host injections
+ * and marks the document as the desktop workbench shell.
  * @param request - Local application request.
  * @param root - Packaged Web dist directory.
  * @returns Static response, or a missing/invalid path response.

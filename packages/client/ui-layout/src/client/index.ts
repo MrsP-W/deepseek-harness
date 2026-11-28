@@ -119,6 +119,25 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * the lights or the controls.
      */
     'shell.leading': { kind: 'single'; scope: 'root' }
+    /**
+     * Full-frame replacement used by the desktop workbench document.
+     * The frame renders this slot instead of the three columns when that
+     * document is marked. The occupant owns the panes inside it.
+     * OCCUPIED by ui-workbench. Its `workbench.composer` child hosts the
+     * official Conversation InputBar for the followed Session.
+     */
+    'workbench': {
+      kind: 'single'
+      scope: 'root'
+      children: {
+        'workbench.composer': { kind: 'single'; scope: 'session-maybe' }
+      }
+    }
+    /**
+     * Official Conversation composer in the workbench workflow column.
+     * OCCUPIED by ui-workbench, bound to the Session the shell follows.
+     */
+    'workbench.composer': { kind: 'single'; scope: 'session-maybe' }
   }
 }
 
@@ -196,6 +215,7 @@ export function apply(ctx: ClientContext): void {
         'sidebar': { kind: 'single', scope: 'root' },
         'main': { kind: 'keyed', scope: 'root' },
         'rightbar': { kind: 'single', scope: 'root' },
+        'workbench': { kind: 'single', scope: 'root' },
         'shell.bottom': { kind: 'single', scope: 'root' },
         'shell.overlay': { kind: 'list', scope: 'root' },
         'shell.leading': { kind: 'single', scope: 'root' },

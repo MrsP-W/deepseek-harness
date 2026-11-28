@@ -7,6 +7,10 @@
  * the Conversation or a global panel. Each column occupant owns its Session
  * binding and reports the geometry it needs.
  *
+ * The desktop application document sets `__DSH_DESKTOP_WORKBENCH__`. That
+ * document renders the `workbench` slot instead of the three columns, so a
+ * feature plugin can show two panes together. The frame does not own that UI.
+ *
  * The right column is a track, not a box: its occupant draws its panel anchored
  * to the frame's right edge at the resolved normal width, and the
  * track only decides whether the centre makes room for it. The occupant reports
@@ -20,6 +24,7 @@ import type {
   HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { CENTER_MIN, clampWidth, computeColumns, RIGHTBAR_DEFAULT_RATIO, RIGHTBAR_MAX_RATIO, RIGHTBAR_MIN, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT, SIDEBAR_DRAWER_BREAKPOINT } from './columns.ts'
+import { isDesktopWorkbenchDocument } from './desktop-workbench.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
@@ -32,7 +37,7 @@ export interface AppFrameInjected {
 /** Full composed props: runtime, child slots, store, locale, and injected posture. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.bottom' | 'shell.overlay' | 'shell.leading'>
+  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'workbench' | 'shell.bottom' | 'shell.overlay' | 'shell.leading'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
   & InjectFace<AppFrameInjected>
@@ -258,6 +263,46 @@ export function AppFrame({
   const onRightbarDrag = useCallback((dx: number) => {
     actions.setRightbar(rightbarBase.current - dx)
   }, [actions])
+  const workbench = isDesktopWorkbenchDocument()
+  const [sessionsOpen, setSessionsOpen] = useState(false)
+  const [filesOpen, setFilesOpen] = useState(false)
+  useEffect(() => {
+    if (!workbench) return
+    const onSessions = (event: Event): void => {
+      const open = (event as CustomEvent<{ open?: boolean }>).detail?.open
+      if (typeof open === 'boolean') setSessionsOpen(open)
+    }
+    const onFiles = (event: Event): void => {
+      const open = (event as CustomEvent<{ open?: boolean }>).detail?.open
+      if (typeof open === 'boolean') setFilesOpen(open)
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      if (sessionsOpen) {
+        event.preventDefault()
+        setSessionsOpen(false)
+        window.dispatchEvent(new CustomEvent('dsh:workbench-sessions', { detail: { open: false } }))
+      }
+      if (filesOpen) {
+        event.preventDefault()
+        setFilesOpen(false)
+        window.dispatchEvent(new CustomEvent('dsh:workbench-files', { detail: { open: false } }))
+      }
+    }
+    window.addEventListener('dsh:workbench-sessions', onSessions)
+    window.addEventListener('dsh:workbench-files', onFiles)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('dsh:workbench-sessions', onSessions)
+      window.removeEventListener('dsh:workbench-files', onFiles)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [workbench, sessionsOpen, filesOpen])
+  const filesWidth = clampWidth(
+    viewport * RIGHTBAR_DEFAULT_RATIO,
+    RIGHTBAR_MIN,
+    Math.max(RIGHTBAR_MIN, viewport * RIGHTBAR_MAX_RATIO),
+  )
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
   // The rendered template lets the grid solve the squeeze natively: the centre
   // declares its protected minimum and the right column bids up to the clamped
@@ -284,6 +329,65 @@ export function AppFrame({
   // AppFrame.module.css reserves clearance for the seat's rendered controls.
   const leading = useMemo(() => renderSlot('shell.leading', {}), [renderSlot])
   const leadingMounted = drawer || darwin && sidebarCollapsed
+
+  if (workbench) {
+    return (
+      <div
+        ref={frameRef}
+        className={css.frame}
+        data-workbench=""
+        data-workbench-sessions={sessionsOpen || undefined}
+        data-workbench-files={filesOpen || undefined}
+      >
+        <DocumentTitle
+          productTitle={productTitle}
+          useSessions={useSessions}
+          usePanelInfo={usePanelInfo}
+        />
+        {renderSlot('workbench', {})}
+        {sessionsOpen && (
+          <div
+            className={css.workbenchDrawerMask}
+            data-workbench-sessions-mask=""
+            aria-hidden="true"
+            onClick={() => {
+              setSessionsOpen(false)
+              window.dispatchEvent(new CustomEvent('dsh:workbench-sessions', { detail: { open: false } }))
+            }}
+          />
+        )}
+        <div
+          className={sessionsOpen ? css.workbenchSessionsHost : css.workbenchSettingsHost}
+          data-workbench-settings-host=""
+          data-workbench-sessions-open={sessionsOpen || undefined}
+          hidden={!sessionsOpen || undefined}
+        >
+          {renderSlot('sidebar', {
+            collapsed: !sessionsOpen,
+            width: SIDEBAR_DEFAULT,
+            drawer: false,
+          })}
+        </div>
+        <div
+          className={css.workbenchFilesHost}
+          data-workbench-files-host=""
+          hidden={!filesOpen || undefined}
+        >
+          {renderSlot('rightbar', {
+            width: filesWidth,
+            viewportWidth: viewport,
+            canShow: filesOpen,
+          })}
+        </div>
+        <div className={css.bottomRow} data-shell-bottom>
+          {renderSlot('shell.bottom', {})}
+        </div>
+        <div className={css.overlayLayer} data-shell-overlay>
+          {overlays}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div

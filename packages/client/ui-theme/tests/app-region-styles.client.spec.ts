@@ -118,6 +118,16 @@ const CHROME_ROWS: readonly ChromeRow[] = [
     markup: 'client/ui-settings-account/src/client/PlatformOverlay.tsx',
     height: ['height', '48px'],
   },
+  {
+    file: 'client/ui-workbench/src/client/WorkbenchShell.module.css',
+    selector: '.workflowHead',
+    markup: 'client/ui-workbench/src/client/WorkbenchShell.tsx',
+  },
+  {
+    file: 'client/ui-workbench/src/client/WorkbenchShell.module.css',
+    selector: '.editorHead',
+    markup: 'client/ui-workbench/src/client/WorkbenchShell.tsx',
+  },
 ]
 
 /**
