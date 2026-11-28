@@ -344,19 +344,22 @@ export function ingestLines(draft: LogDraft, text: string, now: number): void {
  */
 export function publishDrafts(drafts: readonly LogDraft[], now: number): { sessions: MonitorSession[]; running: number } {
   const byMeta = new Map(drafts.filter(draft => draft.metaId !== '').map(draft => [draft.metaId, draft.id]))
-  const sessions = drafts.map((draft): MonitorSession => ({
-    id: draft.id,
-    agent: draft.agent,
-    surface: draft.surface,
-    title: draft.title,
-    cwd: draft.cwd,
-    startedAt: draft.startedAt,
-    status: draft.status,
-    prompt: draft.prompt,
-    ...(draft.parentMetaId !== '' && byMeta.get(draft.parentMetaId) !== undefined ? { parentId: byMeta.get(draft.parentMetaId) } : {}),
-    steps: draft.steps,
-    files: draft.files.map(file => ({ ...file, fresh: file.fresh || now - file.at < 20_000 })),
-  }))
+  const sessions = drafts.map((draft): MonitorSession => {
+    const parentId = draft.parentMetaId === '' ? undefined : byMeta.get(draft.parentMetaId)
+    return {
+      id: draft.id,
+      agent: draft.agent,
+      surface: draft.surface,
+      title: draft.title,
+      cwd: draft.cwd,
+      startedAt: draft.startedAt,
+      status: draft.status,
+      prompt: draft.prompt,
+      ...(parentId !== undefined ? { parentId } : {}),
+      steps: draft.steps,
+      files: draft.files.map(file => ({ ...file, fresh: file.fresh || now - file.at < 20_000 })),
+    }
+  })
   sessions.sort((left, right) => right.startedAt - left.startedAt)
   const running = sessions.filter(session => session.parentId === undefined && session.status === 'running').length
   return { sessions, running }
