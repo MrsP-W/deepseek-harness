@@ -9,7 +9,7 @@ import { apply, inject } from '../src/client/index.ts'
 
 describe('ui-workbench apply', () => {
   it('declares its service dependencies and has no host behavior', () => {
-    expect(inject).toEqual(['slots', 'sessions', 'locale'])
+    expect(inject).toEqual(['slots', 'sessions', 'locale', 'uiWorkspace'])
     expect(nodeApply()).toBeUndefined()
   })
 
@@ -25,11 +25,15 @@ describe('ui-workbench apply', () => {
       retain: () => { throw new Error('workbench test does not open a session') },
       create: () => Promise.reject(new Error('workbench test does not create a session')),
     })
+    ctx.provide('uiWorkspace', {
+      openWorkspace: async () => {},
+      startSession: () => {},
+    })
     const slots = ctx.get('slots') as SlotRegistry
     slots.register({
       name: 'root',
       children: { workbench: { kind: 'single', scope: 'root' } },
-    }, () => null)
+    } as never, () => null)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(slots.entries('workbench')).toHaveLength(1)

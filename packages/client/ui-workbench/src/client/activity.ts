@@ -75,6 +75,8 @@ export interface ActivityModel {
   readonly steps: readonly ActivityStep[]
   /** Tool calls in log order, newest calls kept when the log is long. */
   readonly trace: readonly ActivityTrace[]
+  /** Every written or edited file, in first-seen order. */
+  readonly files: readonly ActivityFile[]
   /** Latest written file, absent before the first write or add-file. */
   readonly file: ActivityFile | null
 }
@@ -85,6 +87,8 @@ export interface WorkbenchView extends ActivityModel {
   readonly sending: boolean
   /** The last prompt was refused or could not start. */
   readonly failed: boolean
+  /** Session the official composer should bind, absent when none is open. */
+  readonly sessionId?: string | undefined
 }
 
 const TRACE_LIMIT = 80
@@ -199,7 +203,12 @@ function remember(files: Map<string, FileDraft>, path: string, text: string, ann
   files.set(path, { text, annotated, cursorLine })
 }
 
-function applyEdit(current: string, oldString: string, newString: string, replaceAll: boolean): { text: string; lines: string; annotated: number[]; cursorLine: number } | undefined {
+function applyEdit(
+  current: string,
+  oldString: string,
+  newString: string,
+  replaceAll: boolean,
+): { text: string; lines: string; annotated: number[]; cursorLine: number } | undefined {
   if (oldString === '') return undefined
   const index = current.indexOf(oldString)
   if (index < 0) {
@@ -261,7 +270,7 @@ function stepStatus(status: TodoDraft['status']): ActivityStep['status'] {
 /**
  * Project session events into the workbench model.
  * @param events - durable events in log order.
- * @returns steps, trace, and the latest written file.
+ * @returns steps, trace, written files, and the latest written file.
  */
 export function projectActivity(events: readonly ActivityEvent[]): ActivityModel {
   const calls: CallDraft[] = []
@@ -389,6 +398,13 @@ export function projectActivity(events: readonly ActivityEvent[]): ActivityModel
     time: formatClock(call.time, true),
     status: call.status,
   }))
+  const fileList: ActivityFile[] = []
+  for (const [path, draft] of files) fileList.push(fileView(path, draft))
   const chosen = selected === undefined ? undefined : files.get(selected)
-  return { steps: visible, trace, file: selected === undefined || chosen === undefined ? null : fileView(selected, chosen) }
+  return {
+    steps: visible,
+    trace,
+    files: fileList,
+    file: selected === undefined || chosen === undefined ? null : fileView(selected, chosen),
+  }
 }

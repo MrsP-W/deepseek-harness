@@ -4,7 +4,7 @@
  * workspace navigation retains as `mainView`. That is the desktop app's live
  * agent session. The workflow engine is not consulted.
  */
-import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionListState, SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
 import { createSnapshotStore, type ObservableSnapshot, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { projectActivity, type ActivityEvent, type ActivityModel, type WorkbenchView } from './activity.ts'
@@ -66,7 +66,12 @@ function mainViewId(list: SessionListState): SessionId | undefined {
   return undefined
 }
 
-function eventsOf(entries: readonly { readonly type: string; readonly event: { readonly type: string; readonly time: number; readonly data: unknown } }[]): ActivityEvent[] {
+function eventsOf(
+  entries: readonly {
+    readonly type: string
+    readonly event: { readonly type: string; readonly time: number; readonly data: unknown }
+  }[],
+): ActivityEvent[] {
   const events: ActivityEvent[] = []
   for (const entry of entries) {
     if (entry.type !== 'event') continue
@@ -85,6 +90,13 @@ export interface WorkbenchActivity {
    * @returns whether the Host accepted the prompt.
    */
   send(text: string): Promise<boolean>
+  /** The followed Session reference, when one is open. */
+  currentReference(): SessionReference | undefined
+  /**
+   * Follow a Session explicitly, used after official Workspace or Session navigation.
+   * @param id - Session to follow, or absence to follow the official main view.
+   */
+  followSession(id?: SessionId): void
   /** Stop following and release the Session reference. */
   dispose(): void
 }
@@ -95,11 +107,12 @@ export interface WorkbenchActivity {
  * @returns the view store, send action, and disposer.
  */
 export function bindWorkbench(sessions: WorkbenchSessions): WorkbenchActivity {
-  const view = createSnapshotStore<WorkbenchView>({ ...EMPTY_MODEL, sending: false, failed: false })
+  const view = createSnapshotStore<WorkbenchView>({ ...EMPTY_MODEL, sending: false, failed: false, sessionId: undefined })
   let model: ActivityModel = EMPTY_MODEL
   let sending = false
   let failed = false
   let ownedId: SessionId | undefined
+  let pinnedId: SessionId | undefined
   let followedId: SessionId | undefined
   let reference: ReturnType<WorkbenchSessions['retain']> | undefined
   let unsubscribeEvents: (() => void) | undefined
@@ -108,7 +121,7 @@ export function bindWorkbench(sessions: WorkbenchSessions): WorkbenchActivity {
 
   const publish = (next: ActivityModel): void => {
     model = next
-    view.set({ ...next, sending, failed })
+    view.set({ ...next, sending, failed, sessionId: followedId })
   }
 
   const releaseFollow = (): void => {
@@ -121,7 +134,16 @@ export function bindWorkbench(sessions: WorkbenchSessions): WorkbenchActivity {
 
   const follow = (): void => {
     if (switching || disposed) return
-    const id = ownedId ?? mainViewId(sessions.list.getSnapshot())
+    const main = mainViewId(sessions.list.getSnapshot())
+    // Official navigation (new session, session switch, workspace pick) updates
+    // mainView. An explicit pin covers the adopt step before replaceMain lands.
+    if (main !== undefined && pinnedId !== undefined && main !== pinnedId) {
+      pinnedId = undefined
+      ownedId = undefined
+    } else if (main !== undefined && pinnedId === undefined) {
+      ownedId = undefined
+    }
+    const id = pinnedId ?? main ?? ownedId
     if (id === followedId) return
     switching = true
     try {
@@ -173,6 +195,15 @@ export function bindWorkbench(sessions: WorkbenchSessions): WorkbenchActivity {
         sending = false
         publish(model)
       }
+    },
+    currentReference(): SessionReference | undefined {
+      return reference as SessionReference | undefined
+    },
+    followSession(id?: SessionId): void {
+      if (disposed) return
+      pinnedId = id
+      ownedId = id
+      follow()
     },
     dispose(): void {
       if (disposed) return

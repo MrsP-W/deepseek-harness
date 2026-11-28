@@ -13,6 +13,7 @@ describe('projectActivity', () => {
     expect(projectActivity([])).toEqual({
       steps: [{ id: 'waiting', title: '', status: 'waiting' }],
       trace: [],
+      files: [],
       file: null,
     })
   })
@@ -29,6 +30,7 @@ describe('projectActivity', () => {
     expect(first.steps).toMatchObject([{ id: 'turn-1', title: '补上分账', status: 'active', detail: 'writing', path: 'src/lib/split.ts' }])
     expect(first.trace).toMatchObject([{ id: 'w1', kind: 'write', action: 'write', status: 'running', path: 'src/lib/split.ts' }])
     expect(first.file?.path).toBe('src/lib/split.ts')
+    expect(first.files.map(file => file.path)).toEqual(['src/lib/split.ts'])
     expect(first.file?.lines).toEqual(['export const amount = 1', ''])
     expect(first.file?.badge).toBe('TS')
     expect(first.trace[0]?.time).toBe(formatClock(at, true))
@@ -132,6 +134,16 @@ describe('projectActivity', () => {
     ])
     expect(blank.file?.badge).toBe('')
     expect(blank.file?.crumbs).toEqual([])
+  })
+
+  it('keeps every written file and selects the latest', () => {
+    const view = projectActivity([
+      event('tool/call', { callId: 'w1', name: 'write', arguments: JSON.stringify({ file_path: 'src/a.ts', content: 'export const a = 1\n' }) }),
+      event('tool/call', { callId: 'w2', name: 'write', arguments: JSON.stringify({ file_path: 'src/b.ts', content: 'export const b = 2\n' }) }),
+    ])
+    expect(view.files.map(file => file.path)).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(view.file?.path).toBe('src/b.ts')
+    expect(view.files[0]?.lines).toEqual(['export const a = 1', ''])
   })
 
   it('ignores a tool call whose arguments are not JSON', () => {

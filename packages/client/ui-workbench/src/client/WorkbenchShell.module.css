@@ -76,6 +76,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   border-right: 0.5px solid var(--dsw-alias-border-l3);
   background: var(--dsw-alias-bg-layer-1);
 }
@@ -100,21 +101,79 @@
 }
 
 .workflowBody {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  max-height: 52%;
   min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.workflowBody[data-all-collapsed] {
+  flex: 0 0 auto;
+  max-height: none;
+}
+
+.stepsPane,
+.tracePane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 72px;
   overflow: auto;
-  padding: 8px 28px 16px;
+  padding: 8px 28px;
+}
+
+.stepsPane {
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.paneCollapsed {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sectionTitle {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 28px 0 12px;
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
   font-weight: 500;
+}
+
+.paneToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 4px 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chevron {
+  flex: none;
+  transition: transform 160ms ease;
+}
+
+.paneToggle[aria-expanded='true'] .chevron {
+  transform: rotate(90deg);
 }
 
 .sectionTitle::after {
@@ -281,98 +340,55 @@
 .composer {
   display: flex;
   flex-direction: column;
-  flex: none;
-  margin: 12px 28px 20px;
-  padding: 10px 10px 10px 16px;
-  border: 0;
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-specific-input-major);
-  box-shadow: var(--dsw-elevation-soft);
-  --dsw-elevation-stroke-color: var(--dsw-alias-border-l2);
-}
-
-.composerRow {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.composerError {
-  margin: 8px 0 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.draft {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
-  max-height: 72px;
-  margin: 0;
-  padding: 4px 0;
-  border: 0;
-  resize: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: 20px;
-}
-
-.draft::placeholder {
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.composerActions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.iconButton,
-.send {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
+  min-height: 0;
+  /* Visible so official workspace, command, and attachment menus are not clipped. */
+  overflow: visible;
+  margin: 8px 16px 16px;
   padding: 0;
-  border: 0;
-  cursor: pointer;
-}
-
-.iconButton {
-  border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
 }
 
-.send {
-  border-radius: 50%;
-  corner-shape: round;
-  background: var(--dsh-workbench-accent);
-  color: var(--dsw-alias-label-on-color);
+/* Official conversation fills the remaining column and scrolls above the InputBar. */
+.composer :global(.Tos7ia_body),
+.composer :global(.Tos7ia_embeddedBody) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
-.send:disabled {
-  opacity: 0.45;
-  cursor: default;
+.composer :global([data-conversation-scroll]),
+.composer :global(.Tos7ia_scrollBody) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
-.iconButton:focus-visible,
-.send:focus-visible,
-.handle:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 2px;
+/* Keep the official InputBar docked at the bottom; hide the empty-state hero chrome
+   so the official workspace chip and InputBar stay usable in this compact seat. */
+.composer :global([data-content-phase='hero']) :global([data-conversation-scroll]),
+.composer :global([data-content-phase='hero']) :global(.Tos7ia_scrollBody) {
+  justify-content: flex-end;
 }
 
-@media (hover: hover) {
-  .iconButton:hover {
-    background: var(--dsw-alias-interactive-bg-hover);
-  }
+.composer :global(.Tos7ia_composerHero) {
+  align-self: stretch;
+  width: 100%;
+  padding-bottom: 0;
+}
 
-  .send:hover {
-    background: color-mix(in srgb, var(--dsw-alias-brand-primary-new-colorprimary-new-color) 86%, var(--dsw-alias-label-primary));
-  }
+.composer :global(.Tos7ia_composerHero) > :first-child {
+  display: none;
 }
 
 .editor {
@@ -416,6 +432,86 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--ds-font-family-code);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  max-width: 220px;
+  margin: 0;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+}
+
+.tab:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .tab:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+
+  .tab[aria-selected='true']:hover {
+    background: var(--dsw-alias-bg-base);
+  }
+}
+
+.traceOpen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.traceOpen[aria-current='true'] {
+  background: var(--dsw-alias-bg-base);
+}
+
+.traceOpen:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .traceOpen:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .crumbs {

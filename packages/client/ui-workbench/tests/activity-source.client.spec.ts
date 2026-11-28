@@ -93,7 +93,7 @@ describe('bindWorkbench', () => {
     const { activity, prompt } = harness()
     await expect(activity.send('   ')).resolves.toBe(false)
     let releasePrompt: (value: { ok: true; value: { accepted: true } }) => void = () => {}
-    prompt.mockReturnValueOnce(new Promise(resolve => { releasePrompt = resolve }))
+    prompt.mockReturnValueOnce(new Promise((resolve) => { releasePrompt = resolve }))
     const first = activity.send('第一句')
     await expect(activity.send('第二句')).resolves.toBe(false)
     releasePrompt({ ok: true, value: { accepted: true } })
@@ -105,7 +105,7 @@ describe('bindWorkbench', () => {
     await expect(activity.send('之后')).resolves.toBe(false)
   })
 
-  it('stays on the Session it created when another main view appears, and skips transient rows', async () => {
+  it('skips transient rows on the Session it created', async () => {
     const { activity, events, create, retain } = harness(false)
     await activity.send('开始')
     events.set({
@@ -120,6 +120,59 @@ describe('bindWorkbench', () => {
     expect(activity.view.getSnapshot().steps[0]?.turn).toBe(1)
     expect(create).toHaveBeenCalledOnce()
     expect(retain).toHaveBeenCalledWith('s-new', { source: 'workbench', connection: true })
+    activity.dispose()
+  })
+
+  it('follows official main-view navigation after it created a Session', async () => {
+    const { activity, list, retain, release } = harness(false)
+    await activity.send('开始')
+    const other = 's-other' as SessionId
+    const otherEvents = createSnapshotStore({
+      entries: [] as { type: string; event: { type: string; time: number; data: unknown } }[],
+      hasMore: false,
+      revision: 0,
+      change: { kind: 'replace' as const, entries: [] as { type: 'event'; event: { type: string; time: number; data: unknown } }[] },
+    })
+    retain.mockImplementationOnce(() => ({
+      sessionId: other,
+      binding: { session: { prompt: vi.fn() }, eventSource: otherEvents },
+      ready: Promise.resolve(),
+      release,
+    }))
+    list.set({
+      ids: [other],
+      byId: {
+        [other]: {
+          id: other, displayTitle: 'Other', running: false, blank: false, updatedAt: 2,
+          retainedBy: retention('mainView', 1),
+        },
+      },
+      phase: 'ready',
+      projectionsBySession: {},
+    })
+    expect(retain).toHaveBeenCalledWith(other, { source: 'workbench', connection: true })
+    expect(activity.currentReference()?.sessionId).toBe(other)
+    activity.dispose()
+  })
+
+  it('follows a Session pinned after an official workspace pick', () => {
+    const { activity, retain, release } = harness(false)
+    const picked = 's-picked' as SessionId
+    const events = createSnapshotStore({
+      entries: [] as { type: string; event: { type: string; time: number; data: unknown } }[],
+      hasMore: false,
+      revision: 0,
+      change: { kind: 'replace' as const, entries: [] as { type: 'event'; event: { type: string; time: number; data: unknown } }[] },
+    })
+    retain.mockImplementationOnce(() => ({
+      sessionId: picked,
+      binding: { session: { prompt: vi.fn() }, eventSource: events },
+      ready: Promise.resolve(),
+      release,
+    }))
+    activity.followSession(picked)
+    expect(retain).toHaveBeenCalledWith(picked, { source: 'workbench', connection: true })
+    expect(activity.currentReference()?.sessionId).toBe(picked)
     activity.dispose()
   })
 
@@ -196,7 +249,7 @@ describe('bindWorkbench', () => {
 
     const late = harness(false)
     let finish: (id: SessionId) => void = () => {}
-    late.create.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    late.create.mockReturnValueOnce(new Promise((resolve) => { finish = resolve }))
     const pending = late.activity.send('晚到')
     late.activity.dispose()
     finish('s-late' as SessionId)

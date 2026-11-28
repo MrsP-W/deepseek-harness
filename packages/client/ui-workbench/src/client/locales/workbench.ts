@@ -11,6 +11,7 @@ export const zh = {
   'rail.settings': '设置',
   'section.workflow': '工作流',
   'section.trajectory': '执行轨迹',
+  'section.steps': '步骤',
   'step.waiting.title': '等待指令',
   'step.turn': '第 {n} 轮',
   'step.detail.writing': '正在写入 {path}',
@@ -27,6 +28,7 @@ export const zh = {
   'composer.label': '下一步指令',
   'composer.attach': '添加附件',
   'composer.send': '发送',
+  'composer.model': '选择模型',
   'composer.failed': '发送没有成功',
   'editor.label': '代码',
   'editor.empty': '代码会在写入后出现在这里',
@@ -35,6 +37,8 @@ export const zh = {
   'editor.encoding': 'UTF-8',
   'editor.newlines': 'LF',
   'editor.indent': '4 spaces',
+  'editor.tabs': '打开的文件',
+  'trajectory.open': '在代码栏打开 {path}',
   'resize.label': '调整工作流栏宽度',
 }
 
@@ -51,6 +55,7 @@ export const en: Record<keyof typeof zh, string> = {
   'rail.settings': 'Settings',
   'section.workflow': 'Workflow',
   'section.trajectory': 'Execution trace',
+  'section.steps': 'Steps',
   'step.waiting.title': 'Waiting for an instruction',
   'step.turn': 'Turn {n}',
   'step.detail.writing': 'Writing {path}',
@@ -67,6 +72,7 @@ export const en: Record<keyof typeof zh, string> = {
   'composer.label': 'Next instruction',
   'composer.attach': 'Add an attachment',
   'composer.send': 'Send',
+  'composer.model': 'Choose model',
   'composer.failed': 'The message was not sent',
   'editor.label': 'Code',
   'editor.empty': 'Code appears here as it is written',
@@ -75,6 +81,8 @@ export const en: Record<keyof typeof zh, string> = {
   'editor.encoding': 'UTF-8',
   'editor.newlines': 'LF',
   'editor.indent': '4 spaces',
+  'editor.tabs': 'Open files',
+  'trajectory.open': 'Open {path} in the code pane',
   'resize.label': 'Resize the workflow column',
 }
 
@@ -91,6 +99,7 @@ export const ja = {
   'rail.settings': '設定',
   'section.workflow': 'ワークフロー',
   'section.trajectory': '実行軌跡',
+  'section.steps': 'ステップ',
   'step.waiting.title': '指示を待っています',
   'step.turn': 'ターン {n}',
   'step.detail.writing': '{path} を書き込み中',
@@ -107,6 +116,7 @@ export const ja = {
   'composer.label': '次の指示',
   'composer.attach': '添付ファイルを追加',
   'composer.send': '送信',
+  'composer.model': 'モデルを選択',
   'composer.failed': '送信できませんでした',
   'editor.label': 'コード',
   'editor.empty': '書き込まれるとコードがここに表示されます',
@@ -115,6 +125,8 @@ export const ja = {
   'editor.encoding': 'UTF-8',
   'editor.newlines': 'LF',
   'editor.indent': '4 spaces',
+  'editor.tabs': '開いているファイル',
+  'trajectory.open': 'コード欄で {path} を開く',
   'resize.label': 'ワークフロー列の幅を変更',
 } satisfies Record<keyof typeof en, string>
 
@@ -131,6 +143,7 @@ export const es = {
   'rail.settings': 'Ajustes',
   'section.workflow': 'Flujo de trabajo',
   'section.trajectory': 'Traza de ejecución',
+  'section.steps': 'Pasos',
   'step.waiting.title': 'Esperando una instrucción',
   'step.turn': 'Turno {n}',
   'step.detail.writing': 'Escribiendo {path}',
@@ -147,6 +160,7 @@ export const es = {
   'composer.label': 'Siguiente instrucción',
   'composer.attach': 'Añadir un archivo',
   'composer.send': 'Enviar',
+  'composer.model': 'Elegir modelo',
   'composer.failed': 'El mensaje no se envió',
   'editor.label': 'Código',
   'editor.empty': 'El código aparece aquí al escribirse',
@@ -155,6 +169,8 @@ export const es = {
   'editor.encoding': 'UTF-8',
   'editor.newlines': 'LF',
   'editor.indent': '4 spaces',
+  'editor.tabs': 'Archivos abiertos',
+  'trajectory.open': 'Abrir {path} en el panel de código',
   'resize.label': 'Cambiar el ancho de la columna de flujo',
 } satisfies Record<keyof typeof en, string>
 
@@ -171,6 +187,7 @@ export const fr = {
   'rail.settings': 'Réglages',
   'section.workflow': 'Flux de travail',
   'section.trajectory': 'Trace d’exécution',
+  'section.steps': 'Étapes',
   'step.waiting.title': 'En attente d’une instruction',
   'step.turn': 'Tour {n}',
   'step.detail.writing': 'Écriture de {path}',
@@ -187,6 +204,7 @@ export const fr = {
   'composer.label': 'Prochaine instruction',
   'composer.attach': 'Ajouter une pièce jointe',
   'composer.send': 'Envoyer',
+  'composer.model': 'Choisir un modèle',
   'composer.failed': 'L’envoi a échoué',
   'editor.label': 'Code',
   'editor.empty': 'Le code apparaît ici au fur et à mesure',
@@ -195,6 +213,8 @@ export const fr = {
   'editor.encoding': 'UTF-8',
   'editor.newlines': 'LF',
   'editor.indent': '4 spaces',
+  'editor.tabs': 'Fichiers ouverts',
+  'trajectory.open': 'Ouvrir {path} dans le volet code',
   'resize.label': 'Redimensionner la colonne du flux',
 } satisfies Record<keyof typeof en, string>
 
@@ -211,6 +231,7 @@ export const de = {
   'rail.settings': 'Einstellungen',
   'section.workflow': 'Arbeitsablauf',
   'section.trajectory': 'Ausführungsspur',
+  'section.steps': 'Schritte',
   'step.waiting.title': 'Auf eine Anweisung warten',
   'step.turn': 'Runde {n}',
   'step.detail.writing': 'Schreibe {path}',
@@ -227,6 +248,7 @@ export const de = {
   'composer.label': 'Nächste Anweisung',
   'composer.attach': 'Anhang hinzufügen',
   'composer.send': 'Senden',
+  'composer.model': 'Modell wählen',
   'composer.failed': 'Die Nachricht wurde nicht gesendet',
   'editor.label': 'Code',
   'editor.empty': 'Code erscheint hier, sobald er geschrieben wird',
@@ -235,6 +257,8 @@ export const de = {
   'editor.encoding': 'UTF-8',
   'editor.newlines': 'LF',
   'editor.indent': '4 spaces',
+  'editor.tabs': 'Geöffnete Dateien',
+  'trajectory.open': '{path} im Codebereich öffnen',
   'resize.label': 'Breite der Arbeitsablaufspalte ändern',
 } satisfies Record<keyof typeof en, string>
 
@@ -251,6 +275,7 @@ export const ru = {
   'rail.settings': 'Настройки',
   'section.workflow': 'Рабочий процесс',
   'section.trajectory': 'Трассировка выполнения',
+  'section.steps': 'Шаги',
   'step.waiting.title': 'Ожидание инструкции',
   'step.turn': 'Ход {n}',
   'step.detail.writing': 'Запись {path}',
@@ -267,6 +292,7 @@ export const ru = {
   'composer.label': 'Следующая инструкция',
   'composer.attach': 'Добавить вложение',
   'composer.send': 'Отправить',
+  'composer.model': 'Выбрать модель',
   'composer.failed': 'Сообщение не отправлено',
   'editor.label': 'Код',
   'editor.empty': 'Код появится здесь по мере записи',
@@ -275,6 +301,8 @@ export const ru = {
   'editor.encoding': 'UTF-8',
   'editor.newlines': 'LF',
   'editor.indent': '4 spaces',
+  'editor.tabs': 'Открытые файлы',
+  'trajectory.open': 'Открыть {path} в панели кода',
   'resize.label': 'Изменить ширину колонки процесса',
 } satisfies Record<keyof typeof en, string>
 
@@ -291,6 +319,7 @@ export const pt = {
   'rail.settings': 'Definições',
   'section.workflow': 'Fluxo de trabalho',
   'section.trajectory': 'Rasto de execução',
+  'section.steps': 'Passos',
   'step.waiting.title': 'À espera de uma instrução',
   'step.turn': 'Turno {n}',
   'step.detail.writing': 'A escrever {path}',
@@ -307,6 +336,7 @@ export const pt = {
   'composer.label': 'Próxima instrução',
   'composer.attach': 'Adicionar um anexo',
   'composer.send': 'Enviar',
+  'composer.model': 'Escolher modelo',
   'composer.failed': 'A mensagem não foi enviada',
   'editor.label': 'Código',
   'editor.empty': 'O código aparece aqui à medida que é escrito',
@@ -315,6 +345,8 @@ export const pt = {
   'editor.encoding': 'UTF-8',
   'editor.newlines': 'LF',
   'editor.indent': '4 spaces',
+  'editor.tabs': 'Arquivos abertos',
+  'trajectory.open': 'Abrir {path} no painel de código',
   'resize.label': 'Ajustar a largura da coluna do fluxo',
 } satisfies Record<keyof typeof en, string>
 
