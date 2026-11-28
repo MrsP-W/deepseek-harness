@@ -1161,7 +1161,12 @@ describe('desktop main startup', () => {
     const window = harness.windows[0]!
     expect(window.urls).toEqual(['dsh-app://app/'])
     if (platform === 'darwin') {
-      expect(window.options).toMatchObject({ titleBarStyle: 'hiddenInset', vibrancy: 'sidebar', backgroundColor: '#00000000' })
+      expect(window.options).toMatchObject({
+        titleBarStyle: 'hiddenInset',
+        trafficLightPosition: { x: 22, y: 22 },
+        vibrancy: 'sidebar',
+        backgroundColor: '#00000000',
+      })
     } else if (platform === 'win32') {
       expect(window.options).toMatchObject({ titleBarStyle: 'hidden', titleBarOverlay: { height: WINDOWS_TITLEBAR_HEIGHT } })
       expect(window.options).not.toHaveProperty('vibrancy')

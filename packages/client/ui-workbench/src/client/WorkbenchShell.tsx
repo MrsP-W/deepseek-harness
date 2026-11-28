@@ -356,24 +356,18 @@ function previewText(text: string): string {
   return line.length > 96 ? `${line.slice(0, 96)}…` : line
 }
 
-/** One input or output table. An empty side keeps its header and does not hide the other table. */
+/** One input or output table. Only the selected page is mounted. */
 function IoTable({
-  caption, rows, empty, streaming, t, onOpenFile,
+  rows, empty, t, onOpenFile,
 }: {
-  caption: string
   rows: readonly TableRow[]
   empty: string
-  streaming: boolean
   t: WorkbenchText
   onOpenFile: (path: string) => void
 }) {
   return (
     <div className={css.ioTableWrap}>
       <table className={css.ioTable}>
-        <caption>
-          <span>{caption}</span>
-          {streaming && <span className={css.streaming}>{t('monitor.streaming')}</span>}
-        </caption>
         <thead>
           <tr>
             <th>{t('monitor.col.time')}</th>
@@ -451,6 +445,7 @@ function MonitorBoard({
     path: item.path,
     content: item.content,
   }))
+  const [ioPage, setIoPage] = useState<'input' | 'output'>('output')
   const catalogTops = catalog.filter(session => session.parentId === undefined
     || !catalog.some(parent => parent.id === session.parentId))
   const byLane = (lane: SessionLane) => catalogTops.filter(session => laneOf(session, now) === lane)
@@ -557,25 +552,37 @@ function MonitorBoard({
           </div>
         </div>
       </article>
-      <article className={css.outputCard} data-monitor-region="output" aria-label={t('editor.label')}>
-        <div className={css.ioTables}>
-          <IoTable
-            caption={t('monitor.input')}
-            rows={inputRows}
-            empty={t('monitor.inputEmpty')}
-            streaming={false}
-            t={t}
-            onOpenFile={onOpenFile}
-          />
-          <IoTable
-            caption={t('monitor.outputPane')}
-            rows={outputRows}
-            empty={t('monitor.outputEmpty')}
-            streaming={file !== null && file.annotated.length > 0}
-            t={t}
-            onOpenFile={onOpenFile}
-          />
+      <article className={css.outputCard} data-monitor-region="output" data-io-page={ioPage} aria-label={t('editor.label')}>
+        <div className={css.ioHead}>
+          <div className={css.viewSwitch} role="tablist" aria-label={`${t('monitor.input')}/${t('monitor.outputPane')}`}>
+            <button
+              type="button"
+              role="tab"
+              className={css.viewButton}
+              aria-selected={ioPage === 'input'}
+              onClick={() => setIoPage('input')}
+            >
+              {t('monitor.input')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={css.viewButton}
+              aria-selected={ioPage === 'output'}
+              onClick={() => setIoPage('output')}
+            >
+              {t('monitor.outputPane')}
+            </button>
+          </div>
+          {ioPage === 'output' && file !== null && file.annotated.length > 0 && (
+            <span className={css.streaming}>{t('monitor.streaming')}</span>
+          )}
         </div>
+        {ioPage === 'input' ? (
+          <IoTable rows={inputRows} empty={t('monitor.inputEmpty')} t={t} onOpenFile={onOpenFile} />
+        ) : (
+          <IoTable rows={outputRows} empty={t('monitor.outputEmpty')} t={t} onOpenFile={onOpenFile} />
+        )}
       </article>
       <section className={css.listCard} data-monitor-region="sessions" data-view={viewMode}>
         <div className={css.cardHead}>
