@@ -1030,42 +1030,78 @@
   flex-direction: column;
 }
 
-.ioSplit {
+.ioTables {
   display: grid;
-  grid-template-rows: minmax(72px, 1fr) minmax(72px, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
   flex: 1;
   min-height: 0;
 }
 
-.ioPane {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.ioTableWrap {
   min-height: 0;
   overflow: auto;
 }
 
-.ioLabel {
-  margin: 0;
+.ioTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.ioTable caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  caption-side: top;
+  margin: 0 0 4px;
+  text-align: left;
   font-size: 12px;
   line-height: 18px;
   font-weight: 500;
 }
 
-.ioPrompt,
-.ioFile {
-  margin: 0;
-  font-size: 13px;
-  line-height: 20px;
+.ioTable th,
+.ioTable td {
+  padding: 4px 6px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  overflow: hidden;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 400;
 }
 
-.ioPrompt { white-space: pre-wrap; }
+.ioTable th {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 500;
+}
 
-.ioFile {
-  color: var(--dsw-alias-label-secondary);
-  font-family: var(--ds-font-family-code);
-  font-size: 12px;
+.ioTable th:first-child,
+.ioTable td:first-child {
+  width: 64px;
+}
+
+.ioTable th:nth-child(2),
+.ioTable td:nth-child(2) {
+  width: 28%;
+}
+
+.ioFileButton {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
 .listCard { grid-column: 1; grid-row: 2; }
 .eventCard { grid-column: 2; grid-row: 2; }

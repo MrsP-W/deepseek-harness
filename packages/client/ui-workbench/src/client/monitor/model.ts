@@ -53,6 +53,8 @@ export interface MonitorRead {
   readonly name: string
   /** Read result or pre-edit text captured from the log. */
   readonly content: string
+  /** Unix epoch milliseconds of the read, when the log has one. */
+  readonly at?: number
 }
 
 /** One local agent session, including a nested subagent. */

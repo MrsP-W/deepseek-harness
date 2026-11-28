@@ -150,6 +150,99 @@ describe('Codex and Antigravity folds', () => {
     expect(ag.reads.map(item => item.content)).toEqual(['# read\n', 'legacy\n'])
     expect(ag.files[0]?.content).toContain('next')
   })
+
+  it('names a session from the user prompt when the directory is a task slug', () => {
+    const cwd = '/Users/wei/Documents/CodexProjects/自动化副业/outputs/taskmarket-tsk-brk611an'
+    const prompt = [
+      'notes.jsonl',
+      'rollout-2026',
+      '/tmp/only.ts',
+      'C:\\src\\a.ts',
+      '',
+      'taskmarket-tsk-brk611an',
+      '给副业页面补上移动端预览',
+    ].join('\n')
+    const draft = createDraft({ path: `/tmp/rollout-${PARENT}.jsonl`, product: 'codex' })
+    ingestLines(draft, [
+      line({ type: 'session_meta', payload: { id: PARENT, cwd, originator: 'codex_exec', source: 'exec' } }),
+      line({ type: 'event_msg', payload: { type: 'user_message', message: '<environment_context>cwd</environment_context>' } }),
+      line({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: '<environment_context>agents</environment_context>' }],
+          internal_chat_message_metadata_passthrough: {
+            content_item_metadata: [{ provenance: { type: 'agents_md' } }],
+          },
+        },
+      }),
+      line({
+        type: 'response_item',
+        payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '先看目录' }] },
+      }),
+      line({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{}, { type: 'input_text', text: prompt }],
+          internal_chat_message_metadata_passthrough: {
+            content_item_metadata: [{ provenance: {} }, { provenance: { type: 'user' } }],
+          },
+        },
+      }),
+    ].join(''), NOW)
+    expect(draft.title).toBe('给副业页面补上移动端预览')
+    expect(draft.prompt).toContain('给副业页面补上移动端预览')
+    expect(draft.cwd).toBe(cwd)
+    const named = createDraft({ path: `/tmp/rollout-${CHILD}.jsonl`, product: 'codex' })
+    ingestLines(named, [
+      line({ type: 'session_meta', payload: { id: CHILD, cwd } }),
+      line({ type: 'event_msg', payload: { type: 'thread_name_updated', thread_name: '副业预览' } }),
+      line({ type: 'event_msg', payload: { type: 'user_message', message: '另一句提问' } }),
+      line({
+        type: 'event_msg',
+        payload: { type: 'item_completed', item: { type: 'UserMessage', content: [{ type: 'text', text: '不该覆盖' }] } },
+      }),
+      line({ type: 'event_msg', payload: { type: 'item_completed', item: { type: 'Plan', text: '1' } } }),
+      line({ type: 'event_msg', payload: { type: 'item_completed' } }),
+    ].join(''), NOW)
+    expect(named.title).toBe('副业预览')
+    expect(named.prompt).toBe('另一句提问')
+    const textOnly = createDraft({ path: '/tmp/rollout-text.jsonl', product: 'codex' })
+    ingestLines(textOnly, line({
+      type: 'event_msg',
+      payload: { type: 'item_completed', item: { type: 'UserMessage', text: '只用 text 字段' } },
+    }), NOW)
+    expect(textOnly.title).toBe('只用 text 字段')
+    const elements = createDraft({ path: '/tmp/rollout-elements.jsonl', product: 'codex' })
+    ingestLines(elements, line({
+      type: 'event_msg',
+      payload: { type: 'user_message', text_elements: [{ text: '来自 text_elements' }] },
+    }), NOW)
+    expect(elements.title).toBe('来自 text_elements')
+    const plain = createDraft({ path: '/tmp/rollout-plain.jsonl', product: 'codex' })
+    ingestLines(plain, line({
+      type: 'response_item',
+      payload: { type: 'message', role: 'user', content: [{ text: '无元数据的提问' }] },
+    }), NOW)
+    expect(plain.title).toBe('无元数据的提问')
+    const slugOnly = createDraft({ path: '/tmp/rollout-slug.jsonl', product: 'codex' })
+    ingestLines(slugOnly, [
+      line({ type: 'session_meta', payload: { id: PARENT, cwd } }),
+      line({ type: 'event_msg', payload: { type: 'user_message', message: 'taskmarket-tsk-brk611an' } }),
+    ].join(''), NOW)
+    expect(slugOnly.prompt).toBe('taskmarket-tsk-brk611an')
+    expect(slugOnly.title).not.toBe('taskmarket-tsk-brk611an')
+    const ag = createDraft({ path: '/brain/conv/.system_generated/logs/transcript_full.jsonl', product: 'antigravity' })
+    ingestLines(ag, line({ source: 'USER_EXPLICIT', type: 'USER_INPUT', content: '给页面加周报' }), NOW)
+    expect(ag.title).toBe('给页面加周报')
+    const agParts = createDraft({ path: '/brain/other/transcript.jsonl', product: 'antigravity' })
+    ingestLines(agParts, line({ source: 'MODEL', type: 'USER_INPUT', content: [{ text: '改 README' }] }), NOW)
+    expect(agParts.title).toBe('改 README')
+    expect(publishDrafts([draft], NOW).sessions[0]?.title).toBe('给副业页面补上移动端预览')
+  })
 })
 
 describe('more log shapes', () => {

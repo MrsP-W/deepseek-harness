@@ -33,7 +33,9 @@ export interface LogDraft {
   sawMeta: boolean
   steps: MonitorStep[]
   files: MonitorFile[]
-  reads: { path: string; name: string; content: string }[]
+  reads: { path: string; name: string; content: string; at: number }[]
+  /** An explicit thread name from the log. A later prompt must not replace it. */
+  titleLocked: boolean
   terminal: boolean
 }
 
@@ -77,12 +79,6 @@ function timeOf(value: unknown, fallback: number): number {
 function fileName(path: string): string {
   const parts = path.split(/[/\\]/u).filter(part => part !== '')
   return parts.at(-1) ?? path
-}
-
-function firstLine(message: string): string {
-  const newline = message.indexOf('\n')
-  const head = newline < 0 ? message : message.slice(0, newline)
-  return head.trim().slice(0, 80)
 }
 
 function looksLikePath(token: string): boolean {
@@ -180,25 +176,95 @@ function outputText(value: unknown): string {
   return firstFilled(key => textOf(body[key]), ['text', 'content', 'output'])
 }
 
-function rememberRead(draft: LogDraft, path: string, content: string): void {
+function rememberRead(draft: LogDraft, path: string, content: string, at: number): void {
   if (content === '') return
-  const next = { path, name: fileName(path), content: clipText(content) }
+  const next = { path, name: fileName(path), content: clipText(content), at }
   const index = draft.reads.findIndex(item => item.path === path)
   if (index >= 0) draft.reads[index] = next
   else draft.reads.push(next)
 }
 
-function conversationTitle(payload: Record<string, unknown>): string {
-  for (const key of ['title', 'name', 'thread_name', 'thread_title']) {
-    const value = textOf(payload[key])
-    if (value !== '') return value
+function blockText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    const parts: string[] = []
+    for (const item of value) {
+      const text = blockText(item)
+      if (text !== '') parts.push(text)
+    }
+    return parts.join('\n')
+  }
+  const body = record(value)
+  if (body === undefined) return ''
+  return firstFilled(key => textOf(body[key]), ['text', 'message'])
+}
+
+function isLogFile(name: string): boolean {
+  return /\.jsonl$/iu.test(name) || /^rollout-/iu.test(name)
+}
+
+function isOnlyPath(value: string): boolean {
+  return value !== '' && !/\s/u.test(value) && (value.includes('/') || value.includes('\\'))
+}
+
+function isContextDump(text: string): boolean {
+  const head = text.trim().slice(0, 64).toLowerCase()
+  for (const marker of ['<environment_context', '<permissions', '# agents.md']) {
+    if (head.startsWith(marker)) return true
+  }
+  return false
+}
+
+/** First human line. Paths, log names, and the cwd slug are skipped. */
+function titleFrom(text: string, cwd: string): string {
+  const folder = fileName(cwd)
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (isLogFile(line)) continue
+    if (isOnlyPath(line)) continue
+    if (folder !== '' && line === folder) continue
+    if (line !== '') return line.slice(0, 80)
   }
   return ''
 }
 
-function usableTitle(value: string): boolean {
-  const trimmed = value.trim()
-  return trimmed !== '' && !/\.jsonl$/iu.test(trimmed) && !trimmed.includes('/') && !trimmed.includes('\\')
+function conversationTitle(payload: Record<string, unknown>): string {
+  return firstFilled(key => textOf(payload[key]), ['title', 'name', 'thread_name', 'thread_title'])
+}
+
+const INJECTED_PROVENANCE = new Set(['developer_instructions', 'skills', 'agents_md', 'harness', 'tool'])
+
+/** True when the message is a person, or the log does not say otherwise. */
+function authoredByUser(payload: Record<string, unknown>): boolean {
+  const meta = record(payload.internal_chat_message_metadata_passthrough)
+  const items = meta?.content_item_metadata
+  if (!Array.isArray(items)) return true
+  let marked = false
+  for (const item of items) {
+    const type = textOf(record(record(item)?.provenance)?.type)
+    if (type === '') continue
+    marked = true
+    if (!INJECTED_PROVENANCE.has(type)) return true
+  }
+  return !marked
+}
+
+function lockTitle(draft: LogDraft, text: string): void {
+  const title = titleFrom(text, draft.cwd)
+  if (title === '') return
+  draft.title = title
+  draft.titleLocked = true
+}
+
+function rememberUser(draft: LogDraft, message: string): void {
+  const text = message.trim()
+  if (text === '' || isContextDump(text)) return
+  if (draft.prompt !== '') return
+  draft.prompt = clipText(text)
+  if (!draft.titleLocked) {
+    const title = titleFrom(text, draft.cwd)
+    if (title !== '') draft.title = title
+  }
 }
 
 function addTool(
@@ -217,9 +283,9 @@ function addTool(
   pushStep(draft, { id, at, action, label: path, status })
   if (action === 'read') {
     const readText = argContent(args)
-    rememberRead(draft, path, readText !== '' ? readText : captured)
+    rememberRead(draft, path, readText !== '' ? readText : captured, at)
   }
-  if (action === 'edit') rememberRead(draft, path, argOld(args))
+  if (action === 'edit') rememberRead(draft, path, argOld(args), at)
   rememberContent(draft, path, argContent(args))
 }
 
@@ -246,8 +312,7 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
     draft.sawMeta = true
     draft.metaId = textOf(payload.id) || textOf(payload.session_id)
     draft.cwd = textOf(payload.cwd) || draft.cwd
-    const named = conversationTitle(payload)
-    if (usableTitle(named)) draft.title = firstLine(named)
+    lockTitle(draft, conversationTitle(payload))
     const parent = parentFromMeta(payload)
     if (parent !== '' && parent !== draft.metaId) {
       draft.parentMetaId = parent
@@ -262,12 +327,23 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
     draft.status = 'running'
     return
   }
+  if (kind === 'thread_name_updated') {
+    lockTitle(draft, firstFilled(key => textOf(payload[key]), ['thread_name', 'name']))
+    return
+  }
   if (kind === 'user_message' || kind === 'user') {
-    const message = textOf(payload.message) || textOf(payload.content) || textOf(payload.text)
-    if (message !== '' && draft.prompt === '') {
-      draft.prompt = message
-      if (!usableTitle(draft.title)) draft.title = firstLine(message)
+    rememberUser(draft, firstFilled(key => blockText(payload[key]), ['message', 'content', 'text', 'text_elements']))
+    return
+  }
+  if (kind === 'item_completed') {
+    const item = record(payload.item)
+    if (item !== undefined && textOf(item.type) === 'UserMessage') {
+      rememberUser(draft, firstFilled(key => blockText(item[key]), ['content', 'text']))
     }
+    return
+  }
+  if (kind === 'message' && textOf(payload.role) === 'user' && authoredByUser(payload)) {
+    rememberUser(draft, blockText(payload.content))
     return
   }
   if (kind === 'task_complete' || kind === 'turn_complete' || kind === 'shutdown') {
@@ -289,7 +365,7 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
     pushStep(draft, { id: `${draft.id}:${sequence}`, at, action: classified.action, label: classified.label, status: failed ? 'error' : 'done' })
     if (classified.action === 'read') {
       const stdout = firstFilled(key => outputText(payload[key]), ['stdout', 'aggregated_output', 'output'])
-      if (stdout !== '') rememberRead(draft, classified.label, stdout)
+      if (stdout !== '') rememberRead(draft, classified.label, stdout, at)
     }
     return
   }
@@ -308,7 +384,7 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
   if (new Set(['function_call_output', 'custom_tool_call_output', 'tool_result']).has(kind)) {
     const output = firstFilled(key => outputText(payload[key]), ['output', 'content', 'result'])
     const lastRead = [...draft.steps].reverse().find(step => step.action === 'read')
-    if (output !== '' && lastRead !== undefined) rememberRead(draft, lastRead.label, output)
+    if (output !== '' && lastRead !== undefined) rememberRead(draft, lastRead.label, output, at)
     return
   }
   if (kind === 'function_call' || kind === 'custom_tool_call' || kind === 'tool_call') {
@@ -320,13 +396,11 @@ function applyCodex(draft: LogDraft, value: Record<string, unknown>, at: number,
 }
 
 function applyAntigravity(draft: LogDraft, value: Record<string, unknown>, at: number, sequence: number): void {
-  const content = textOf(value.content)
   const source = textOf(value.source).toUpperCase()
-  const named = conversationTitle(value)
-  if (usableTitle(named)) draft.title = firstLine(named)
-  if ((source === 'USER' || textOf(value.type) === 'user') && content !== '' && draft.prompt === '') {
-    draft.prompt = content
-    if (!usableTitle(draft.title)) draft.title = firstLine(content)
+  const typeName = textOf(value.type).toUpperCase()
+  lockTitle(draft, conversationTitle(value))
+  if (source === 'USER' || source.startsWith('USER_') || typeName === 'USER' || typeName === 'USER_INPUT') {
+    rememberUser(draft, blockText(value.content))
   }
   const statusText = textOf(value.status).toUpperCase()
   const status: MonitorStatus = statusText === 'RUNNING' ? 'running' : statusText === 'ERROR' ? 'error' : 'done'
@@ -374,6 +448,7 @@ export function createDraft(source: LogSource): LogDraft {
     steps: [],
     files: [],
     reads: [],
+    titleLocked: false,
     terminal: false,
   }
 }

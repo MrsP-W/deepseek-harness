@@ -190,17 +190,29 @@ function isLogName(name: string): boolean {
   return /\.jsonl$/iu.test(name) || /^rollout-/iu.test(name)
 }
 
-function usableName(value: string): boolean {
-  const trimmed = value.trim()
-  return trimmed !== '' && !isLogName(trimmed) && !trimmed.includes('/') && !trimmed.includes('\\')
+function isOnlyPath(value: string): boolean {
+  return value !== '' && !/\s/u.test(value) && (value.includes('/') || value.includes('\\'))
 }
 
-/** Conversation title, else the prompt, else the project folder. Log filenames are never shown. */
+/** A display title. Paths, log filenames, and the working-directory slug are not titles. */
+function acceptedTitle(value: string, folder: string): string {
+  const trimmed = value.trim()
+  if (trimmed === '' || isLogName(trimmed) || isOnlyPath(trimmed) || trimmed === folder) return ''
+  return trimmed.slice(0, 80)
+}
+
+/**
+ * Conversation title, else the first human line of the prompt.
+ * The project folder is used only when the log has neither.
+ */
 function displayName(session: MonitorSession): string {
-  if (usableName(session.title)) return session.title.trim()
-  const head = session.prompt.replace(/\n[\s\S]*/u, '').trim()
-  if (usableName(head)) return head.slice(0, 80)
   const folder = pathTail(session.cwd)
+  const titled = acceptedTitle(session.title, folder)
+  if (titled !== '') return titled
+  for (const raw of session.prompt.split('\n')) {
+    const line = acceptedTitle(raw, folder)
+    if (line !== '') return line
+  }
   if (folder !== '' && !isLogName(folder)) return folder
   return session.agent === 'codex' ? 'Codex' : 'Antigravity'
 }
@@ -316,8 +328,70 @@ function PaneToggle({ open, label, onToggle }: { open: boolean; label: string; o
   )
 }
 
+interface TableRow {
+  key: string
+  at: number
+  name: string
+  path: string
+  content: string
+}
+
+function previewText(text: string): string {
+  const line = text.replace(/\s+/gu, ' ').trim()
+  return line.length > 96 ? `${line.slice(0, 96)}…` : line
+}
+
+/** One input or output table. An empty side keeps its header and does not hide the other table. */
+function IoTable({
+  caption, rows, empty, streaming, t, onOpenFile,
+}: {
+  caption: string
+  rows: readonly TableRow[]
+  empty: string
+  streaming: boolean
+  t: WorkbenchText
+  onOpenFile: (path: string) => void
+}) {
+  return (
+    <div className={css.ioTableWrap}>
+      <table className={css.ioTable}>
+        <caption>
+          <span>{caption}</span>
+          {streaming && <span className={css.streaming}>{t('monitor.streaming')}</span>}
+        </caption>
+        <thead>
+          <tr>
+            <th>{t('monitor.col.time')}</th>
+            <th>{t('monitor.col.file')}</th>
+            <th>{t('monitor.col.text')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={3} className={css.empty}>{empty}</td>
+            </tr>
+          ) : rows.map(row => (
+            <tr key={row.key}>
+              <td>{clock(row.at)}</td>
+              <td>
+                {row.path === '' ? row.name : (
+                  <button type="button" className={css.ioFileButton} data-workbench-open-file={row.path} onClick={() => onOpenFile(row.path)}>
+                    {row.name}
+                  </button>
+                )}
+              </td>
+              <td>{row.content === '' ? t('monitor.elapsed.none') : previewText(row.content)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function MonitorBoard({
-  t, sessions, catalog, selected, filter, page, viewMode, files, file, now,
+  t, sessions, catalog, selected, filter, page, viewMode, file, now,
   onFilter, onView, onSelect, onOpenFile,
 }: {
   t: WorkbenchText
@@ -327,7 +401,6 @@ function MonitorBoard({
   filter: 'all' | 'codex' | 'antigravity'
   page: 'overview' | 'sources'
   viewMode: 'list' | 'repo' | 'board'
-  files: readonly ActivityFile[]
   file: ActivityFile | null
   now: number
   onFilter: (next: 'all' | 'codex' | 'antigravity') => void
@@ -338,9 +411,31 @@ function MonitorBoard({
   const tops = sessions.filter(session => session.parentId === undefined
     || !sessions.some(parent => parent.id === session.parentId))
   const current = selected?.steps.at(-1)
-  const reads = selected?.reads ?? []
-  const activeRead = reads.find(item => item.path === file?.path) ?? reads.at(-1)
-  const hasInput = (selected?.prompt ?? '') !== '' || (activeRead !== undefined && activeRead.content !== '')
+  const inputRows: TableRow[] = []
+  if (selected !== undefined && selected.prompt !== '') {
+    inputRows.push({
+      key: 'prompt', at: selected.startedAt, name: t('monitor.promptName'), path: '', content: selected.prompt,
+    })
+  }
+  if (selected !== undefined) {
+    for (const read of selected.reads ?? []) {
+      if (read.content === '') continue
+      inputRows.push({
+        key: `read:${read.path}`,
+        at: read.at ?? selected.startedAt,
+        name: read.name || labelName(read.path),
+        path: read.path,
+        content: read.content,
+      })
+    }
+  }
+  const outputRows: TableRow[] = (selected?.files ?? []).map(item => ({
+    key: `file:${item.path}`,
+    at: item.at,
+    name: item.name || labelName(item.path),
+    path: item.path,
+    content: item.content,
+  }))
   const catalogTops = catalog.filter(session => session.parentId === undefined
     || !catalog.some(parent => parent.id === session.parentId))
   const byLane = (lane: SessionLane) => catalogTops.filter(session => laneOf(session, now) === lane)
@@ -446,51 +541,23 @@ function MonitorBoard({
         </div>
       </article>
       <article className={css.outputCard} data-monitor-region="output" aria-label={t('editor.label')}>
-        <h3 className={css.cardHeading}>{t('monitor.output')}</h3>
-        <div className={css.ioSplit}>
-          <section className={css.ioPane} data-monitor-pane="input">
-            <h4 className={css.ioLabel}>{t('monitor.input')}</h4>
-            {selected !== undefined && selected.prompt !== '' && <p className={css.ioPrompt}>{selected.prompt}</p>}
-            {activeRead !== undefined && activeRead.content !== '' && (
-              <>
-                <p className={css.ioFile}>{activeRead.name || labelName(activeRead.path)}</p>
-                <pre className={css.previewCode}>{activeRead.content}</pre>
-              </>
-            )}
-            {!hasInput && <p className={css.empty}>{t('monitor.inputEmpty')}</p>}
-          </section>
-          <section className={css.ioPane} data-monitor-pane="output">
-            <div className={css.outputHead}>
-              <h4 className={css.ioLabel}>{t('monitor.outputPane')}</h4>
-              {file !== null && file.annotated.length > 0 && (
-                <span className={css.streaming}>{t('monitor.streaming')}</span>
-              )}
-            </div>
-            {files.length > 0 && (
-              <div className={css.tabs} role="tablist" aria-label={t('editor.tabs')}>
-                {files.map(item => (
-                  <button
-                    key={item.path}
-                    type="button"
-                    role="tab"
-                    className={css.tab}
-                    aria-selected={file?.path === item.path}
-                    onClick={() => onOpenFile(item.path)}
-                  >
-                    {fileName(item)}
-                  </button>
-                ))}
-              </div>
-            )}
-            {file === null ? <p className={css.empty}>{t('monitor.outputEmpty')}</p> : (
-              <pre className={css.previewCode}>
-                {file.lines.map((line, index) => {
-                  const live = file.annotated.includes(index + 1)
-                  return <span key={index} className={live ? css.liveLine : undefined}>{line}{'\n'}</span>
-                })}
-              </pre>
-            )}
-          </section>
+        <div className={css.ioTables}>
+          <IoTable
+            caption={t('monitor.input')}
+            rows={inputRows}
+            empty={t('monitor.inputEmpty')}
+            streaming={false}
+            t={t}
+            onOpenFile={onOpenFile}
+          />
+          <IoTable
+            caption={t('monitor.outputPane')}
+            rows={outputRows}
+            empty={t('monitor.outputEmpty')}
+            streaming={file !== null && file.annotated.length > 0}
+            t={t}
+            onOpenFile={onOpenFile}
+          />
         </div>
       </article>
       <section className={css.listCard} data-monitor-region="sessions" data-view={viewMode}>
@@ -865,7 +932,6 @@ export function WorkbenchShell({
             filter={filter}
             page={page}
             viewMode={viewMode}
-            files={monitorFiles}
             file={file}
             now={Date.now()}
             onFilter={setFilter}

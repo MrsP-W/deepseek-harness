@@ -131,7 +131,8 @@ describe('WorkbenchShell', () => {
       sessions: [
         {
           id: 'ag:1', agent: 'antigravity', surface: 'app', title: '给 aurora-sync 加上本机文件监听',
-          cwd: '/Projects/aurora-sync', startedAt: Date.now() - 2 * 60 * 60 * 1000, status: 'running', prompt: '给 aurora-sync 加上本机文件监听',
+          cwd: '/Projects/aurora-sync', startedAt: Date.now() - 2 * 60 * 60 * 1000, status: 'running',
+          prompt: `给 aurora-sync 加上本机文件监听 ${'x'.repeat(120)}`,
           steps: [
             { id: 'read', at: 1, action: 'read', label: 'README.md', status: 'done' },
             { id: 'cmd', at: Date.now() - 5_000, action: 'command', label: 'npm test', status: 'done' },
@@ -162,7 +163,7 @@ describe('WorkbenchShell', () => {
           cwd: '', startedAt: Date.now() - 2 * 60 * 60 * 1000, status: 'done', prompt: '',
           steps: [{ id: 'win', at: 1, action: 'read', label: 'C:\\src\\app.js', status: 'done' }],
           files: [{ path: 'C:\\src\\app.js', name: '', content: 'export const win = 1\n', fresh: false, action: 'edit', at: 1 }],
-          reads: [{ path: 'C:\\src\\app.js', name: '', content: 'export const readwin = 1\n' }],
+          reads: [{ path: 'C:\\src\\app.js', name: '', content: 'export const readwin = 1\n', at: 1 }],
         },
         {
           id: 'codex:1', agent: 'codex', surface: 'desktop', title: '为 aurora-sync 补充单元测试',
@@ -183,6 +184,13 @@ describe('WorkbenchShell', () => {
           cwd: '', startedAt: 1, status: 'done', prompt: '',
           steps: [{ id: 'slash', at: 1, action: 'read', label: '/', status: 'done' }], files: [],
         },
+        {
+          id: 'codex:named', agent: 'codex', surface: 'exec', title: 'taskmarket-tsk-brk611an',
+          cwd: '/Users/wei/Documents/CodexProjects/自动化副业/outputs/taskmarket-tsk-brk611an',
+          startedAt: Date.now() - 1000, status: 'done',
+          prompt: '/tmp/only.ts\n\nnotes.jsonl\ntaskmarket-tsk-brk611an\n给副业页面补上移动端预览',
+          steps: [], files: [],
+        },
       ],
     }
     installPointerCapture()
@@ -199,7 +207,7 @@ describe('WorkbenchShell', () => {
     )
     expect(view.getByRole('heading', { name: zh['monitor.title'] })).toBeTruthy()
     expect(view.getByText(zh['monitor.mark'])).toBeTruthy()
-    expect(view.getByText(/正在监控 7 个会话/u)).toBeTruthy()
+    expect(view.getByText(/正在监控 8 个会话/u)).toBeTruthy()
     expect(view.getByText(zh['monitor.readonly'])).toBeTruthy()
     expect(view.getByRole('heading', { level: 3, name: '给 aurora-sync 加上本机文件监听' })).toBeTruthy()
     expect(view.getByText(zh['monitor.streaming'])).toBeTruthy()
@@ -209,6 +217,7 @@ describe('WorkbenchShell', () => {
     expect(editor.textContent).toContain('export const before = 0')
     expect(editor.textContent).toContain(zh['monitor.outputPane'])
     expect(editor.textContent).toContain('export const watcher = true')
+    expect(view.getAllByRole('table')).toHaveLength(2)
     expect(document.body.textContent).not.toContain('/Users/wei/Documents')
     expect(view.getAllByText('app.js').length).toBeGreaterThan(0)
     expect(document.querySelector('[data-monitor-region="highlight"]')).not.toBeNull()
@@ -218,6 +227,8 @@ describe('WorkbenchShell', () => {
     expect(document.querySelector('[data-workbench-session="codex:child"]')?.textContent).toContain(zh['monitor.origin.subagent'])
     expect(document.querySelector('[data-workbench-session="codex:exec"]')?.textContent).toContain(zh['monitor.origin.exec'])
     expect(document.querySelector('[data-workbench-session="codex:soon"]')?.textContent).toContain('taskmarket-tsk-brk611an')
+    expect(document.querySelector('[data-workbench-session="codex:named"]')?.textContent).toContain('给副业页面补上移动端预览')
+    expect(document.querySelector('[data-workbench-session="codex:named"]')?.textContent).not.toContain('taskmarket-tsk-brk611an')
     expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain('Antigravity')
     expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).not.toContain('transcript_full.jsonl')
     expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain(zh['monitor.lane.waiting'])
@@ -242,12 +253,16 @@ describe('WorkbenchShell', () => {
     expect(document.querySelector('[data-workbench-session="ag:1"]')).toBeNull()
     fireEvent.change(view.getByRole('searchbox', { name: zh['monitor.search'] }), { target: { value: '' } })
     fireEvent.click(document.querySelector('[data-workbench-session="ag:cli"]') as Element)
+    expect(view.getAllByRole('table')).toHaveLength(2)
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain(zh['monitor.inputEmpty'])
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain(zh['monitor.outputEmpty'])
     fireEvent.click(document.querySelector('[data-workbench-session="codex:exec"]') as Element)
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const readwin = 1')
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain('app.js')
     fireEvent.click(document.querySelector('[data-workbench-session="codex:1"]') as Element)
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain('为 aurora-sync 补充单元测试')
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain(zh['monitor.outputEmpty'])
+    expect(view.getByLabelText(zh['editor.label']).textContent).not.toContain(zh['monitor.inputEmpty'])
     fireEvent.click(document.querySelector('[data-workbench-session="codex:soon"]') as Element)
     fireEvent.click(document.querySelector('[data-workbench-session="codex:child"]') as Element)
     window.dispatchEvent(new CustomEvent('dsh:workbench-sessions', { detail: { open: true } }))
@@ -264,10 +279,10 @@ describe('WorkbenchShell', () => {
     fireEvent.click(view.getByRole('button', { name: zh['monitor.view.list'] }))
     fireEvent.click(view.getByRole('button', { name: zh['monitor.all'] }))
     fireEvent.click(document.querySelector('[data-workbench-session="ag:1"]') as Element)
-    fireEvent.click(view.getByRole('tab', { name: 'README' }))
+    fireEvent.click(document.querySelector('[data-workbench-open-file="/"]') as Element)
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain('plain')
     expect(view.queryByText(zh['monitor.streaming'])).toBeNull()
-    fireEvent.click(document.querySelector('[data-workbench-open-file="src/sync/watcher.ts"]') as Element)
+    fireEvent.click(document.querySelector('[data-monitor-region="output"] [data-workbench-open-file="src/sync/watcher.ts"]') as Element)
     fireEvent.click(document.querySelector('[data-workbench-trace="write"] button') as Element)
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const watcher = true')
     expect(view.getByText(zh['monitor.streaming'])).toBeTruthy()
