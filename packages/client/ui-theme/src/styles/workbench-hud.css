@@ -46,3 +46,28 @@
   --dsh-mon-gutter: rgb(196, 196, 200);
   --dsh-mon-fresh-no: rgb(127, 160, 136);
 }
+
+[data-dsh-workbench][data-theme='night'] {
+  color-scheme: dark;
+  --dsw-alias-bg-base: rgb(28, 27, 25);
+  --dsw-alias-bg-layer-1: rgb(42, 40, 37);
+  --dsw-alias-bg-layer-2: rgb(28, 27, 25);
+  --dsw-alias-bg-layer-3: rgb(58, 55, 50);
+  --dsw-alias-label-primary: rgb(244, 241, 234);
+  --dsw-alias-label-secondary: rgb(196, 190, 180);
+  --dsw-alias-label-tertiary: rgb(158, 152, 142);
+  --dsw-specific-sidebar-fill: rgb(24, 23, 21);
+  --dsw-alias-interactive-bg-hover: rgb(255 255 255 / 8%);
+  --dsh-mon-ground: rgb(28, 27, 25);
+  --dsh-mon-card: rgb(42, 40, 37);
+  --dsh-mon-card-on: rgb(52, 58, 68);
+  --dsh-mon-chrome: rgb(54, 51, 46);
+  --dsh-mon-codex-fg: rgb(198, 198, 240);
+  --dsh-mon-codex-bg: rgb(58, 58, 92);
+  --dsh-mon-ag-fg: rgb(168, 224, 214);
+  --dsh-mon-ag-bg: rgb(28, 72, 66);
+  --dsh-mon-live-bg: rgb(28, 58, 40);
+  --dsh-mon-live-line: rgb(70, 120, 84);
+  --dsh-mon-error-fg: rgb(244, 176, 164);
+  --dsh-mon-error-bg: rgb(92, 42, 36);
+}

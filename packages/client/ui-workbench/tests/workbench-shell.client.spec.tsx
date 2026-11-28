@@ -131,10 +131,11 @@ describe('WorkbenchShell', () => {
       sessions: [
         {
           id: 'ag:1', agent: 'antigravity', surface: 'app', title: '给 aurora-sync 加上本机文件监听',
-          cwd: '/Projects/aurora-sync', startedAt: 1, status: 'running', prompt: '给 aurora-sync 加上本机文件监听',
+          cwd: '/Projects/aurora-sync', startedAt: Date.now() - 3_000, status: 'running', prompt: '给 aurora-sync 加上本机文件监听',
           steps: [
             { id: 'read', at: 1, action: 'read', label: 'README.md', status: 'done' },
-            { id: 'cmd', at: 2, action: 'command', label: 'npm test', status: 'done' },
+            { id: 'cmd', at: Date.now() - 5_000, action: 'command', label: 'npm test', status: 'done' },
+            { id: 'later', at: Date.now() + 60_000, action: 'read', label: 'later', status: 'done' },
             { id: 'edit', at: 3, action: 'edit', label: 'src/sync/manifest.ts', status: 'done' },
             { id: 'write', at: 4, action: 'write', label: 'src/sync/watcher.ts', status: 'running' },
           ],
@@ -149,12 +150,16 @@ describe('WorkbenchShell', () => {
         },
         {
           id: 'codex:exec', agent: 'codex', surface: 'exec', title: '命令行检查',
-          cwd: '', startedAt: 4, status: 'done', prompt: '', steps: [], files: [],
+          cwd: '', startedAt: Date.now() - 2 * 60 * 60 * 1000, status: 'done', prompt: '', steps: [], files: [],
         },
         {
           id: 'codex:1', agent: 'codex', surface: 'desktop', title: '为 aurora-sync 补充单元测试',
-          cwd: '/Projects/aurora-sync', startedAt: 2, status: 'done', prompt: '为 aurora-sync 补充单元测试',
+          cwd: '/Projects/aurora-sync', startedAt: Date.now() - 5 * 60 * 1000, status: 'done', prompt: '为 aurora-sync 补充单元测试',
           steps: [], files: [],
+        },
+        {
+          id: 'codex:soon', agent: 'codex', surface: 'desktop', title: '即将开始',
+          cwd: '', startedAt: Date.now() + 10_000, status: 'done', prompt: '', steps: [], files: [],
         },
         {
           id: 'codex:child', agent: 'codex', surface: 'subagent', title: '补齐 SyncManifest 类型定义',
@@ -174,8 +179,13 @@ describe('WorkbenchShell', () => {
         renderSlot={renderSlot}
       />,
     )
-    expect(view.getByRole('heading', { name: zh['section.workflow'] })).toBeTruthy()
+    expect(view.getByRole('heading', { name: zh['monitor.title'] })).toBeTruthy()
     expect(view.getByText('实时 · 1 个进行中')).toBeTruthy()
+    expect(view.getByText(zh['monitor.watching'])).toBeTruthy()
+    expect(view.getByText(zh['monitor.streaming'])).toBeTruthy()
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const watcher = true')
+    expect(document.querySelector('[data-monitor-region="highlight"]')).not.toBeNull()
+    expect(document.querySelector('[data-monitor-region="events"]')).not.toBeNull()
     expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain('反重力 · 应用')
     expect(document.querySelector('[data-workbench-session="codex:child"]')?.textContent).toContain(zh['monitor.subagent'])
     expect(document.querySelector('[data-workbench-session="codex:exec"]')?.textContent).toContain('Codex · CLI/exec')
@@ -189,10 +199,20 @@ describe('WorkbenchShell', () => {
     expect(document.querySelector('[data-monitor-count="error"]')?.textContent).toContain('1')
     expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain('/Projects/aurora-sync')
     const rail = view.getByRole('navigation', { name: zh['rail.label'] })
-    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.chat']}"]`) as Element)
-    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.workflow']}"]`) as Element)
-    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.files']}"]`) as Element)
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['monitor.sources']}"]`) as Element)
+    expect(view.getByText(zh['monitor.sourcesNote'])).toBeTruthy()
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['monitor.overview']}"]`) as Element)
     fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.settings']}"]`) as Element)
+    fireEvent.click(view.getByRole('button', { name: zh['monitor.night'] }))
+    expect(document.querySelector('[data-theme="night"]')).not.toBeNull()
+    fireEvent.click(view.getByRole('button', { name: zh['monitor.day'] }))
+    fireEvent.change(view.getByRole('searchbox', { name: zh['monitor.search'] }), { target: { value: '命令行' } })
+    expect(document.querySelector('[data-workbench-session="ag:1"]')).toBeNull()
+    fireEvent.change(view.getByRole('searchbox', { name: zh['monitor.search'] }), { target: { value: '' } })
+    fireEvent.click(document.querySelector('[data-workbench-session="ag:cli"]') as Element)
+    fireEvent.click(document.querySelector('[data-workbench-session="codex:exec"]') as Element)
+    fireEvent.click(document.querySelector('[data-workbench-session="codex:1"]') as Element)
+    fireEvent.click(document.querySelector('[data-workbench-session="codex:soon"]') as Element)
     fireEvent.click(document.querySelector('[data-workbench-session="codex:child"]') as Element)
     window.dispatchEvent(new CustomEvent('dsh:workbench-sessions', { detail: { open: true } }))
     window.dispatchEvent(new CustomEvent('dsh:workbench-files', { detail: { open: false } }))
@@ -203,10 +223,14 @@ describe('WorkbenchShell', () => {
     expect(document.querySelector('[data-workbench-session="ag:1"]')).toBeNull()
     expect(document.querySelector('[data-workbench-session="codex:1"]')).not.toBeNull()
     fireEvent.click(view.getByRole('button', { name: zh['monitor.all'] }))
+    fireEvent.click(view.getByRole('tab', { name: 'README' }))
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain('plain')
+    expect(view.queryByText(zh['monitor.streaming'])).toBeNull()
     fireEvent.click(document.querySelector('[data-workbench-open-file="src/sync/watcher.ts"]') as Element)
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const watcher = true')
+    expect(view.getByText(zh['monitor.streaming'])).toBeTruthy()
     expect(document.querySelector('[data-workbench-composer] [data-official-composer]')).not.toBeNull()
-    expect(document.querySelectorAll('[data-window-drag]')).toHaveLength(2)
+    expect(document.querySelectorAll('[data-window-drag]')).toHaveLength(1)
   })
 
   it('shows the empty copy when no local logs are listed', () => {
@@ -222,7 +246,7 @@ describe('WorkbenchShell', () => {
         renderSlot={renderSlot}
       />,
     )
-    expect(view.getByText(zh['monitor.empty'])).toBeTruthy()
+    expect(view.getAllByText(zh['monitor.empty']).length).toBeGreaterThan(0)
     expect(view.getByText('实时 · 0 个进行中')).toBeTruthy()
     expect(document.querySelector('[data-monitor-count="running"]')?.textContent).toContain('0')
     expect(document.querySelector('[data-monitor]')).not.toBeNull()
@@ -388,6 +412,11 @@ describe('WorkbenchShell', () => {
     const handle = view.getByRole('separator', { name: zh['resize.label'] })
     expect(handle.getAttribute('aria-valuenow')).toBe('440')
     expect(handle.getAttribute('aria-valuemin')).toBe('0')
+    const rail = view.getByRole('navigation', { name: zh['rail.label'] })
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.chat']}"]`) as Element)
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.files']}"]`) as Element)
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.workflow']}"]`) as Element)
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.settings']}"]`) as Element)
   })
 
   it('collapses the steps and trace panes independently', () => {
