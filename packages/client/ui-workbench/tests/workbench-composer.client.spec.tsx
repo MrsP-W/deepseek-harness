@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 /** Official Conversation factory props used by the workbench composer. */
+import type { ReactNode } from 'react'
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { ConversationViewsProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { WorkbenchComposer, type WorkbenchComposerProps } from '../src/client/WorkbenchComposer.tsx'
+import { WorkbenchComposer, WorkbenchConversationView, type WorkbenchComposerProps } from '../src/client/WorkbenchComposer.tsx'
 
 function sessionSnapshot(overrides: Record<string, unknown> = {}) {
   return {
@@ -88,9 +90,17 @@ describe('WorkbenchComposer', () => {
       { variant: 'embedded', phase: 'active', hero: false, onWorkspaceSelected },
       expect.objectContaining({ slots: expect.objectContaining({ views: expect.any(Function) }) }),
     )
-    const views = renderFactorySlot.mock.calls[0]?.[2]?.slots.views
+  })
+
+  it('renders the official chat view for the hosted conversation', () => {
     const renderSlot = vi.fn(() => <span data-chat-view="" />)
-    if (views !== undefined) render(views({ renderSlot }))
+    const props = {
+      renderSlot,
+      renderSlotChain: () => null,
+      SessionProvider: ({ children }: { children?: ReactNode }) => children,
+      moveDraft: vi.fn(),
+    } as ConversationViewsProps
+    render(<WorkbenchConversationView {...props} />)
     expect(renderSlot).toHaveBeenCalledWith('conversation.session', { view: 'chat' })
   })
 

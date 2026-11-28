@@ -141,7 +141,7 @@ describe('WorkbenchShell', () => {
           ],
           files: [
             { path: 'src/sync/watcher.ts', name: 'watcher.ts', content: 'export const watcher = true\n', fresh: true, action: 'write', at: 4 },
-            { path: '/', name: 'README', content: 'plain\n', fresh: false, action: 'read', at: 1 },
+            { path: '/', name: 'README', content: 'plain\n', fresh: false, action: 'write', at: 1 },
           ],
         },
         {

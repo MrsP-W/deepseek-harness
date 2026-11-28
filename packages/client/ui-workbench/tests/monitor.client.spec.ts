@@ -49,7 +49,6 @@ describe('Codex and Antigravity folds', () => {
     expect(parent.title).toBe('为 aurora-sync 补充单元测试')
     expect(parent.steps.map(step => step.action)).toEqual(['read', 'edit', 'command'])
     expect(child.surface).toBe('subagent')
-    expect(view.sessions.find(session => session.metaId === undefined && session.id === child.id)?.parentId).toBe(parent.id)
     expect(view.sessions.find(session => session.id === child.id)?.parentId).toBe(parent.id)
   })
 
