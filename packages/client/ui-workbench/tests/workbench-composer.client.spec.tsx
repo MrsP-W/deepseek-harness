@@ -88,5 +88,90 @@ describe('WorkbenchComposer', () => {
       { variant: 'embedded', phase: 'active', hero: false, onWorkspaceSelected },
       expect.objectContaining({ slots: expect.objectContaining({ views: expect.any(Function) }) }),
     )
+    const views = renderFactorySlot.mock.calls[0]?.[2]?.slots.views
+    const renderSlot = vi.fn(() => <span data-chat-view="" />)
+    if (views !== undefined) render(views({ renderSlot }))
+    expect(renderSlot).toHaveBeenCalledWith('conversation.session', { view: 'chat' })
+  })
+
+  it('uses engaging, settling, and running-only phases from the official Session', () => {
+    const renderFactorySlot = vi.fn(() => <div data-official-content="" />)
+    const onWorkspaceSelected = vi.fn()
+    const sessionId = 's-phase' as SessionId
+    const sessions = {
+      ids: [sessionId],
+      byId: { [sessionId]: { id: sessionId, displayTitle: 'Phase', running: false, blank: false, updatedAt: 1, retainedBy: {} } },
+      phase: 'ready' as const,
+      projectionsBySession: {},
+    }
+    const conversation = { views: { get: () => undefined, grouped: () => undefined }, activeTargets: new Set() }
+    mount({
+      sessionId,
+      useSession: selector => selector(sessionSnapshot({ promptAttempted: true }) as never),
+      useConversation: selector => selector(conversation as never),
+      useSessions: selector => selector(sessions as never),
+      renderFactorySlot,
+      onWorkspaceSelected,
+    })
+    expect(renderFactorySlot).toHaveBeenLastCalledWith(
+      'conversation.content',
+      { variant: 'embedded', phase: 'active', hero: false, onWorkspaceSelected },
+      expect.anything(),
+    )
+    mount({
+      sessionId,
+      useSession: selector => selector(sessionSnapshot({ openState: 'loading' }) as never),
+      useConversation: selector => selector(conversation as never),
+      useSessions: selector => selector(sessions as never),
+      renderFactorySlot,
+      onWorkspaceSelected,
+    })
+    expect(renderFactorySlot).toHaveBeenLastCalledWith(
+      'conversation.content',
+      { variant: 'embedded', phase: 'settling', hero: false, onWorkspaceSelected },
+      expect.anything(),
+    )
+    mount({
+      sessionId,
+      useSession: selector => selector(sessionSnapshot({ blank: false, awaitingFirstTurn: false, running: false }) as never),
+      useConversation: selector => selector(conversation as never),
+      useSessions: selector => selector(sessions as never),
+      renderFactorySlot,
+      onWorkspaceSelected,
+    })
+    expect(renderFactorySlot).toHaveBeenLastCalledWith(
+      'conversation.content',
+      { variant: 'embedded', phase: 'active', hero: false, onWorkspaceSelected },
+      expect.anything(),
+    )
+    mount({
+      sessionId,
+      useSession: selector => selector(sessionSnapshot({ running: true }) as never),
+      useConversation: selector => selector(conversation as never),
+      useSessions: selector => selector({ ...sessions, byId: {} } as never),
+      renderFactorySlot,
+      onWorkspaceSelected,
+    })
+    expect(renderFactorySlot).toHaveBeenLastCalledWith(
+      'conversation.content',
+      { variant: 'embedded', phase: 'active', hero: false, onWorkspaceSelected },
+      expect.anything(),
+    )
+    mount({
+      sessionId,
+      useSession: selector => selector(sessionSnapshot({ openState: 'closed' }) as never),
+      useConversation: selector => selector(conversation as never),
+      useSessions: selector => selector({
+        ...sessions,
+        byId: { [sessionId]: { ...sessions.byId[sessionId], blank: true } },
+      } as never),
+      renderFactorySlot,
+      onWorkspaceSelected,
+    })
+    expect(renderFactorySlot).toHaveBeenLastCalledWith(
+      'conversation.content',
+      { variant: 'embedded', phase: 'hero', hero: true, onWorkspaceSelected },
+      expect.anything(),
+    )
   })
 })

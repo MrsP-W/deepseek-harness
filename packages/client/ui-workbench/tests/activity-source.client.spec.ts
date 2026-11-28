@@ -156,7 +156,7 @@ describe('bindWorkbench', () => {
   })
 
   it('follows a Session pinned after an official workspace pick', () => {
-    const { activity, retain, release } = harness(false)
+    const { activity, list, retain, release } = harness(false)
     const picked = 's-picked' as SessionId
     const events = createSnapshotStore({
       entries: [] as { type: string; event: { type: string; time: number; data: unknown } }[],
@@ -173,7 +173,29 @@ describe('bindWorkbench', () => {
     activity.followSession(picked)
     expect(retain).toHaveBeenCalledWith(picked, { source: 'workbench', connection: true })
     expect(activity.currentReference()?.sessionId).toBe(picked)
+    const other = 's-other' as SessionId
+    retain.mockImplementationOnce(() => ({
+      sessionId: other,
+      binding: { session: { prompt: vi.fn() }, eventSource: events },
+      ready: Promise.resolve(),
+      release,
+    }))
+    list.set({
+      ids: [other],
+      byId: {
+        [other]: {
+          id: other, displayTitle: 'Other', running: false, blank: false, updatedAt: 2,
+          retainedBy: retention('mainView', 1),
+        },
+      },
+      phase: 'ready',
+      projectionsBySession: {},
+    })
+    expect(retain).toHaveBeenCalledWith(other, { source: 'workbench', connection: true })
+    expect(activity.currentReference()?.sessionId).toBe(other)
     activity.dispose()
+    activity.followSession(picked)
+    expect(activity.currentReference()).toBeUndefined()
   })
 
   it('reports a create failure and follows a replacement main view', async () => {

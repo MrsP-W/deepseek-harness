@@ -34,6 +34,7 @@ import { installDesktopFileDrag } from './file-drag.ts'
 import { installDesktopDirectoryPicker } from './directory-picker.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
+import { generationRoots, listGenerationLogs, readGenerationSlice, watchGeneration } from './generation-monitor.ts'
 import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
 import { readDeviceInfo } from './device-info.ts'
 import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
@@ -789,7 +790,6 @@ async function main(): Promise<void> {
     // A confirmation on a hidden window would go unseen, so it waits for the next show; the mandatory
     // flow keeps its own taskbar and Dock attention instead.
     if (!isMandatory()) await windowShown()
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- A quit can begin while the show is awaited.
     if (quitting) return state
     return updates.install(version, revision)
   }
@@ -823,6 +823,29 @@ async function main(): Promise<void> {
   const shortcuts = installDesktopShortcuts(() => mainWindow, app.getPath('userData'),
     process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux', () => { refreshApplicationMenu() }, window => updateOverlays.input(window))
   app.on('will-quit', () => { shortcuts.dispose() })
+
+  const stopGenerationWatch = watchGeneration(() => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(DESKTOP_IPC.generationChanged)
+    }
+  })
+  app.on('will-quit', () => { stopGenerationWatch() })
+  ipcMain.handle(DESKTOP_IPC.generationFiles, async (event) => {
+    assertDesktopSender(event, ['app'])
+    return listGenerationLogs()
+  })
+  ipcMain.handle(DESKTOP_IPC.generationRead, async (event, path: unknown, offset: unknown, max: unknown) => {
+    assertDesktopSender(event, ['app'])
+    if (typeof path !== 'string' || typeof offset !== 'number' || typeof max !== 'number') return null
+    return readGenerationSlice(path, offset, Math.min(max, 1_500_000), await generationRoots())
+  })
+  ipcMain.handle(DESKTOP_IPC.generationReadText, async (event, path: unknown, max: unknown) => {
+    assertDesktopSender(event, ['app'])
+    if (typeof path !== 'string' || typeof max !== 'number') return null
+    const roots = await generationRoots()
+    const slice = await readGenerationSlice(path, 0, Math.min(max, 120_000), roots)
+    return slice?.text ?? null
+  })
 
   ipcMain.handle(DESKTOP_IPC.boot, async (event) => {
     assertDesktopSender(event, ['app'])

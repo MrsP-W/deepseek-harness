@@ -86,6 +86,196 @@
   min-width: 0;
 }
 
+.filter {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex: none;
+  margin: 12px 16px 0;
+  padding: 4px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsh-mon-card);
+  box-shadow: var(--dsw-elevation-soft);
+}
+
+.filterButton {
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.filterButton[aria-pressed='true'] {
+  background: var(--dsh-mon-ground);
+  color: var(--dsw-alias-label-primary);
+}
+
+.counts {
+  display: flex;
+  gap: 8px;
+  flex: none;
+  margin: 8px 16px 0;
+}
+
+.count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsh-mon-card);
+  box-shadow: var(--dsw-elevation-soft);
+}
+
+.countValue {
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.countLabel {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.count[data-status='running'] .countValue {
+  color: var(--dsh-mon-green);
+}
+
+.count[data-status='error'] .countValue {
+  color: var(--dsh-mon-error-fg);
+}
+
+.liveCount {
+  margin-left: auto;
+  color: var(--dsh-mon-green);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsh-mon-card);
+  box-shadow: var(--dsw-elevation-soft);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessionOn {
+  background: var(--dsh-mon-card-on);
+}
+
+.sessionNested {
+  margin-left: 12px;
+  width: calc(100% - 12px);
+}
+
+.sessionBadge,
+.sessionChild {
+  border-radius: var(--dsw-radius-xs);
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.badgeCodex {
+  background: var(--dsh-mon-codex-bg);
+  color: var(--dsh-mon-codex-fg);
+}
+
+.badgeAg {
+  background: var(--dsh-mon-ag-bg);
+  color: var(--dsh-mon-ag-fg);
+}
+
+.sessionChild {
+  background: var(--dsh-mon-codex-bg);
+  color: var(--dsh-mon-codex-fg);
+}
+
+.sessionTitle {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.sessionCwd {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sessionStatus {
+  margin-left: auto;
+  padding: 0 8px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsh-mon-chrome);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.session[data-status='running'] .sessionStatus {
+  background: var(--dsh-mon-live-bg);
+  color: var(--dsh-mon-green);
+}
+
+.session[data-status='error'] .sessionStatus {
+  background: var(--dsh-mon-error-bg);
+  color: var(--dsh-mon-error-fg);
+}
+
+.prompt {
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsh-mon-card);
+  box-shadow: var(--dsw-elevation-soft);
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.traceLive {
+  background: var(--dsh-mon-live-bg);
+  box-shadow: var(--dsw-elevation-soft), inset 0 0 0 1px var(--dsh-mon-live-line);
+}
+
 .paneTop {
   display: flex;
   align-items: center;
@@ -122,7 +312,7 @@
   flex: 1 1 0;
   min-height: 72px;
   overflow: auto;
-  padding: 8px 28px;
+  padding: 8px 16px 12px;
 }
 
 .stepsPane {
@@ -641,4 +831,67 @@
 
 :global(html[data-platform='darwin']:not([data-fullscreen])) .rail {
   padding-top: calc(var(--dsh-frame-top-clearance) + 8px);
+}
+
+.shell[data-monitor] .workflow,
+.shell[data-monitor] .editor {
+  background: var(--dsh-mon-ground);
+}
+
+.shell[data-monitor] .sectionTitle {
+  background: var(--dsh-mon-ground);
+}
+
+.shell[data-monitor] .trace {
+  gap: 8px;
+}
+
+.shell[data-monitor] .traceRow {
+  padding: 10px 12px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsh-mon-card);
+  box-shadow: var(--dsw-elevation-soft);
+}
+
+.shell[data-monitor] .traceRow.traceLive {
+  background: var(--dsh-mon-live-bg);
+  box-shadow: var(--dsw-elevation-soft), inset 0 0 0 1px var(--dsh-mon-live-line);
+}
+
+.shell[data-monitor] .editor .empty,
+.shell[data-monitor] .stepsPane .empty {
+  margin: 8px 0;
+  padding: 24px 16px;
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsh-mon-card);
+  box-shadow: var(--dsw-elevation-soft);
+}
+
+.shell[data-monitor] .crumbs {
+  margin: 8px 12px 0;
+  border-radius: var(--dsw-radius-xl) var(--dsw-radius-xl) 0 0;
+  background: var(--dsh-mon-card);
+}
+
+.shell[data-monitor] .codeScroll {
+  margin: 0 12px;
+  background: var(--dsh-mon-card);
+}
+
+.shell[data-monitor] .statusBar {
+  margin: 0 12px 12px;
+  border-radius: 0 0 var(--dsw-radius-xl) var(--dsw-radius-xl);
+  background: var(--dsh-mon-card);
+}
+
+.filterButton:focus-visible,
+.session:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .session:hover {
+    background: var(--dsh-mon-card-on);
+  }
 }

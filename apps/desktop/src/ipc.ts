@@ -44,6 +44,10 @@ export const DESKTOP_IPC = {
   windowFullscreen: 'dsh-desktop:window-fullscreen',
   windowsAppearance: 'dsh-desktop:windows-appearance',
   windowsMenu: 'dsh-desktop:windows-menu',
+  generationFiles: 'dsh-desktop:generation-files',
+  generationRead: 'dsh-desktop:generation-read',
+  generationReadText: 'dsh-desktop:generation-read-text',
+  generationChanged: 'dsh-desktop:generation-changed',
 } as const
 
 /** Desktop release update state rendered by desktop-owned UI. */
@@ -102,6 +106,12 @@ export interface DshDesktopProductApi {
    * @returns `name=value` fields separated by `; `, with no hostname, user name, or serial number.
    */
   deviceInfo(): Promise<string>
+  readonly generationMonitor?: {
+    files(): Promise<readonly { path: string; product: 'codex' | 'antigravity' | 'antigravity-cli' }[]>
+    read(path: string, offset: number, max: number): Promise<{ text: string; size: number; bytes: number } | null>
+    readText(path: string, max: number): Promise<string | null>
+    subscribe(listener: () => void): () => void
+  }
   readonly updates: {
     readonly channels: DesktopChannelBridge
     status(): Promise<DesktopUpdatePresentation>

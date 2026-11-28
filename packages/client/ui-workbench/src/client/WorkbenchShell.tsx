@@ -16,6 +16,7 @@ import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-store'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { ActivityFile, ActivityStep, ActivityTrace, WorkbenchView } from './activity.ts'
+import type { MonitorSession, MonitorSnapshot } from './monitor/model.ts'
 import type { WorkbenchKey } from './locales/workbench.ts'
 import css from './WorkbenchShell.module.css'
 
@@ -49,6 +50,8 @@ export type WorkbenchShellProps = {
   openFiles?: (open: boolean) => void
   /** Open the official Settings dialog, the same path as Cmd+,. */
   openSettings?: () => void
+  /** Local Codex and Antigravity logs. Absent in the activity-only shell. */
+  useMonitor?: SnapshotSelectorHook<MonitorSnapshot>
 } & PropsRenderSlots<'workbench.composer'>
 
 const RAIL_WIDTH = 56
@@ -127,12 +130,42 @@ function fileName(file: ActivityFile): string {
   return file.crumbs.at(-1) ?? file.path
 }
 
-function visibleFile(activity: WorkbenchView, selectedPath: string | undefined): ActivityFile | null {
-  if (selectedPath !== undefined) {
-    const chosen = activity.files.find(file => file.path === selectedPath)
-    if (chosen !== undefined) return chosen
+function ignoreSession(): void {}
+
+function ignoreOpen(open: boolean): void {
+  void open
+}
+
+function clock(at: number): string {
+  const date = new Date(at)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function badgeKey(session: MonitorSession): WorkbenchKey {
+  if (session.agent === 'antigravity') return session.surface === 'cli' ? 'monitor.badge.ag.cli' : 'monitor.badge.ag.app'
+  if (session.surface === 'exec') return 'monitor.badge.codex.exec'
+  return 'monitor.badge.codex.desktop'
+}
+
+function monitorFile(file: MonitorSession['files'][number]): ActivityFile {
+  const lines = file.content.split('\n').slice(0, 800)
+  const crumbs = file.path.split(/[/\\]/u).filter(part => part !== '')
+  const dot = file.name.lastIndexOf('.')
+  const extension = dot > 0 ? file.name.slice(dot + 1) : ''
+  const annotated = file.fresh ? lines.map((_, index) => index + 1).slice(-7) : []
+  return {
+    path: file.path,
+    crumbs: crumbs.length > 0 ? crumbs : [file.name],
+    badge: extension.slice(0, 4).toUpperCase(),
+    lines,
+    annotated,
+    cursorLine: Math.max(lines.length, 1),
+    cursorColumn: 1,
   }
-  return activity.file
+}
+
+function visibleFile(activity: WorkbenchView, selectedPath: string | undefined): ActivityFile | null {
+  return activity.files.find(file => file.path === selectedPath) ?? activity.file
 }
 
 function openablePath(event: ActivityTrace, files: readonly ActivityFile[]): string | undefined {
@@ -144,6 +177,36 @@ function openablePath(event: ActivityTrace, files: readonly ActivityFile[]): str
  * @param props - Copy, the Session projection, and the official composer seat.
  * @returns The rail, workflow column, editor column, and the column separator.
  */
+
+/** One local Codex or Antigravity session inside the existing steps pane. */
+function SessionRow({
+  session, selected, nested = false, t, onSelect,
+}: {
+  session: MonitorSession
+  selected: boolean
+  nested?: boolean
+  t: WorkbenchText
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className={[css.session, selected ? css.sessionOn : '', nested ? css.sessionNested : ''].filter(part => part !== '').join(' ')}
+      data-workbench-session={session.id}
+      data-status={session.status}
+      aria-current={selected ? 'true' : undefined}
+      onClick={onSelect}
+    >
+      {nested && <span className={css.sessionChild}>{t('monitor.subagent')}</span>}
+      <span className={session.agent === 'codex' ? `${css.sessionBadge} ${css.badgeCodex}` : `${css.sessionBadge} ${css.badgeAg}`}>
+        {t(badgeKey(session))}
+      </span>
+      <span className={css.sessionTitle}>{session.title}</span>
+      {session.cwd !== '' && <span className={css.sessionCwd}>{session.cwd}</span>}
+      <span className={css.sessionStatus}>{t(session.status === 'running' ? 'monitor.running' : session.status === 'error' ? 'monitor.error' : 'monitor.done')}</span>
+    </button>
+  )
+}
 
 /** Header button that expands or collapses a workflow pane. */
 function PaneToggle({ open, label, onToggle }: { open: boolean; label: string; onToggle: () => void }) {
@@ -160,9 +223,12 @@ function PaneToggle({ open, label, onToggle }: { open: boolean; label: string; o
 }
 
 export function WorkbenchShell({
-  t, useActivity, sessionOf, startSession = () => {}, openSessions = () => {}, openFiles = () => {},
-  openSettings = () => {}, SessionProvider, renderSlot,
+  t, useActivity, sessionOf, startSession, openSessions, openFiles, openSettings, useMonitor, SessionProvider, renderSlot,
 }: WorkbenchShellProps) {
+  const beginSession = startSession ?? ignoreSession
+  const showSessions = openSessions ?? ignoreOpen
+  const showFiles = openFiles ?? ignoreOpen
+  const showSettings = openSettings ?? ignoreSession
   const [preference, setPreference] = useState(PREFERRED)
   const [container, setContainer] = useState(0)
   const [stepsOpen, setStepsOpen] = useState(true)
@@ -170,8 +236,22 @@ export function WorkbenchShell({
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [filesOpen, setFilesOpen] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined)
+  const [filter, setFilter] = useState<'all' | 'codex' | 'antigravity'>('all')
+  const [monitorId, setMonitorId] = useState<string | undefined>(undefined)
   const activity = useActivity(view => view)
-  const file = visibleFile(activity, selectedPath)
+  const monitor = useMonitor?.(view => view)
+  const monitorMode = useMonitor !== undefined
+  const visibleSessions = (monitor?.sessions ?? []).filter(session => filter === 'all' || session.agent === filter)
+  const tops = visibleSessions.filter(session => session.parentId === undefined
+    || !visibleSessions.some(parent => parent.id === session.parentId))
+  const selectedMonitor = visibleSessions.find(session => session.id === monitorId)
+    ?? tops[0]
+    ?? visibleSessions[0]
+  const monitorFiles = (selectedMonitor?.files ?? []).map(monitorFile)
+  const shownFiles = monitorMode ? monitorFiles : activity.files
+  const file = monitorMode
+    ? shownFiles.find(item => item.path === selectedPath) ?? shownFiles.find(item => item.annotated.length > 0) ?? shownFiles.at(-1) ?? null
+    : visibleFile(activity, selectedPath)
   const session = sessionOf()
   const shellRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef(0)
@@ -251,7 +331,7 @@ export function WorkbenchShell({
   const valueMax = room === 0 ? rendered : Math.max(valueMin, room - editorFloor)
 
   return (
-    <div ref={shellRef} className={css.shell} data-workbench-shell="" data-dsh-workbench="" style={widthStyle}>
+    <div ref={shellRef} className={css.shell} data-workbench-shell="" data-dsh-workbench="" data-monitor={monitor !== undefined ? '' : undefined} style={widthStyle}>
       <nav className={css.rail} aria-label={t('rail.label')}>
         <div className={css.railGroup}>
           {RAIL.map((item) => {
@@ -267,16 +347,16 @@ export function WorkbenchShell({
                 aria-pressed={pressed}
                 onClick={() => {
                   if (item.id === 'workflow') {
-                    openSessions(false)
-                    openFiles(false)
+                    showSessions(false)
+                    showFiles(false)
                     return
                   }
                   if (item.id === 'chat') {
-                    startSession()
-                    openSessions(true)
+                    beginSession()
+                    showSessions(true)
                     return
                   }
-                  openFiles(!filesOpen)
+                  showFiles(!filesOpen)
                 }}
               >
                 <Icon size={18} />
@@ -284,7 +364,7 @@ export function WorkbenchShell({
             )
           })}
         </div>
-        <button type="button" className={`${css.railButton} ${css.railSettings}`} aria-label={t('rail.settings')} onClick={openSettings}>
+        <button type="button" className={`${css.railButton} ${css.railSettings}`} aria-label={t('rail.settings')} onClick={showSettings}>
           <IconSettingsOutlineMedium size={18} />
         </button>
       </nav>
@@ -293,10 +373,66 @@ export function WorkbenchShell({
           <IconBranchOutlineMedium size={16} />
           {t('section.workflow')}
         </h2>
+        {monitor !== undefined && (
+          <div className={css.filter} role="tablist" aria-label={t('monitor.filter')}>
+            {(['all', 'codex', 'antigravity'] as const).map(item => (
+              <button
+                key={item}
+                type="button"
+                className={css.filterButton}
+                aria-pressed={filter === item}
+                onClick={() => setFilter(item)}
+              >
+                {t(item === 'all' ? 'monitor.all' : item === 'codex' ? 'monitor.codex' : 'monitor.ag')}
+              </button>
+            ))}
+            <span className={css.liveCount}>{t('monitor.live', { count: monitor.running })}</span>
+          </div>
+        )}
+        {monitor !== undefined && (
+          <div className={css.counts}>
+            {([
+              ['running', visibleSessions.filter(item => item.status === 'running').length, 'monitor.running'],
+              ['done', visibleSessions.filter(item => item.status === 'done').length, 'monitor.done'],
+              ['error', visibleSessions.filter(item => item.status === 'error').length, 'monitor.error'],
+            ] as const).map(([status, count, key]) => (
+              <span key={status} className={css.count} data-status={status} data-monitor-count={status}>
+                <span className={css.countValue}>{count}</span>
+                <span className={css.countLabel}>{t(key)}</span>
+              </span>
+            ))}
+          </div>
+        )}
         <div className={css.workflowBody} data-all-collapsed={stepsOpen || traceOpen ? undefined : ''}>
           <div className={stepsOpen ? css.stepsPane : `${css.stepsPane} ${css.paneCollapsed}`} data-workbench-steps-pane="" data-collapsed={stepsOpen ? undefined : ''}>
-            <PaneToggle open={stepsOpen} label={t('section.steps')} onToggle={() => setStepsOpen(open => !open)} />
-            {stepsOpen && <ol className={css.steps}>
+            <PaneToggle open={stepsOpen} label={t(monitorMode ? 'monitor.sessions' : 'section.steps')} onToggle={() => setStepsOpen(open => !open)} />
+            {stepsOpen && monitorMode && (
+              visibleSessions.length === 0
+                ? <p className={css.empty}>{t('monitor.empty')}</p>
+                : <ul className={css.sessions}>
+                  {tops.map(session => (
+                    <li key={session.id}>
+                      <SessionRow
+                        session={session}
+                        selected={selectedMonitor?.id === session.id}
+                        t={t}
+                        onSelect={() => { setMonitorId(session.id); setSelectedPath(undefined) }}
+                      />
+                      {visibleSessions.filter(child => child.parentId === session.id).map(child => (
+                        <SessionRow
+                          key={child.id}
+                          session={child}
+                          selected={selectedMonitor?.id === child.id}
+                          nested
+                          t={t}
+                          onSelect={() => { setMonitorId(child.id); setSelectedPath(undefined) }}
+                        />
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+            )}
+            {stepsOpen && !monitorMode && <ol className={css.steps}>
               {activity.steps.map((step, index) => {
                 const active = step.status === 'active'
                 const waiting = step.status === 'waiting'
@@ -331,7 +467,31 @@ export function WorkbenchShell({
           </div>
           <div className={traceOpen ? css.tracePane : `${css.tracePane} ${css.paneCollapsed}`} data-workbench-trace-pane="" data-collapsed={traceOpen ? undefined : ''}>
             <PaneToggle open={traceOpen} label={t('section.trajectory')} onToggle={() => setTraceOpen(open => !open)} />
-            {traceOpen && <ol className={css.trace}>
+            {traceOpen && monitorMode && selectedMonitor !== undefined && selectedMonitor.prompt !== '' && (
+              <p className={css.prompt} data-workbench-prompt="">{selectedMonitor.prompt}</p>
+            )}
+            {traceOpen && monitorMode && <ol className={css.trace}>
+              {(selectedMonitor?.steps ?? []).map((step) => {
+                const openPath = step.action === 'write' || step.action === 'edit' ? step.label : undefined
+                const row = (
+                  <>
+                    <span className={css.kind}>{t(step.action === 'read' ? 'monitor.read' : step.action === 'command' ? 'monitor.command' : step.action === 'write' ? 'monitor.write' : 'monitor.edit')}</span>
+                    <span className={css.traceBody}>{step.label}</span>
+                    <time className={css.traceTime}>{clock(step.at)}</time>
+                  </>
+                )
+                return (
+                  <li key={step.id} className={step.status === 'running' ? `${css.traceRow} ${css.traceLive}` : css.traceRow} data-workbench-trace={step.id} data-status={step.status}>
+                    {openPath === undefined ? row : (
+                      <button type="button" className={css.traceOpen} data-workbench-open-file={openPath} onClick={() => setSelectedPath(openPath)}>
+                        {row}
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
+            </ol>}
+            {traceOpen && !monitorMode && <ol className={css.trace}>
               {activity.trace.map((event) => {
                 const Icon = TRACE_ICON[event.action]
                 const path = openablePath(event, activity.files)
@@ -371,9 +531,9 @@ export function WorkbenchShell({
       </section>
       <section className={css.editor} aria-label={t('editor.label')} data-workbench-editor-file={file?.path ?? ''}>
         <div className={`${css.editorHead} ${css.tabBar} ${css.paneTop}`} data-window-drag>
-          {activity.files.length > 1 ? (
+          {shownFiles.length > 1 ? (
             <div className={css.tabs} role="tablist" aria-label={t('editor.tabs')}>
-              {activity.files.map(item => (
+              {shownFiles.map(item => (
                 <button
                   key={item.path}
                   type="button"
@@ -419,7 +579,7 @@ export function WorkbenchShell({
                         <span key={tokenIndex} className={css[tokenKind(value)]}>{value}</span>
                       ))}
                     </code>
-                    {file.annotated.includes(lineNo) && <span className={css.annotation}>{t('editor.written')}</span>}
+                    {file.annotated.includes(lineNo) && <span className={css.annotation}>{t(monitorMode ? 'monitor.fresh' : 'editor.written')}</span>}
                   </div>
                 )
               })}

@@ -13,7 +13,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { bindWorkbench } from './activity-source.ts'
+import { EMPTY_MONITOR, type MonitorBridge, type MonitorSnapshot } from './monitor/model.ts'
+import { pollMonitor, type LogCursor } from './monitor/poll.ts'
 import { WorkbenchComposer } from './WorkbenchComposer.tsx'
 import { WorkbenchShell } from './WorkbenchShell.tsx'
 import {
@@ -43,6 +46,39 @@ interface FilesSidebar {
   openTab(kind: string): void
 }
 
+function desktopBridge(): MonitorBridge | undefined {
+  const desktop = (globalThis as typeof globalThis & { dshDesktop?: { generationMonitor?: MonitorBridge } }).dshDesktop
+  return desktop?.generationMonitor
+}
+
+/**
+ * Poll local Codex and Antigravity logs while the bridge exists.
+ * @param publish - receive each snapshot.
+ * @returns stop the poll.
+ */
+export function startMonitor(publish: (snapshot: MonitorSnapshot) => void): () => void {
+  const bridge = desktopBridge()
+  if (bridge === undefined) return () => {}
+  const cursors = new Map<string, LogCursor>()
+  let stopped = false
+  const tick = (): void => {
+    void pollMonitor(bridge, cursors, Date.now()).then((snapshot) => {
+      if (!stopped) publish(snapshot)
+    }).catch((_error: unknown) => {
+      // A failed read keeps the previous snapshot. The next poll tries again.
+      return undefined
+    })
+  }
+  const unsubscribe = bridge.subscribe(tick)
+  const timer = setInterval(tick, 1500)
+  tick()
+  return () => {
+    stopped = true
+    clearInterval(timer)
+    unsubscribe()
+  }
+}
+
 /** Required services: slot registry, the Session controller, copy, and official workspace navigation. */
 export const inject = ['slots', 'sessions', 'locale', 'uiWorkspace']
 
@@ -52,6 +88,7 @@ export const inject = ['slots', 'sessions', 'locale', 'uiWorkspace']
  */
 export function apply(ctx: ClientContext): void {
   const activity = bindWorkbench(ctx.sessions)
+  const monitor = createSnapshotStore<MonitorSnapshot>(EMPTY_MONITOR)
   const workspace = ctx.get('uiWorkspace') as WorkspaceNavigation
   const openWorkspace: WorkspaceSelectedHandler = (workspaceId, adopt) => (
     workspace.openWorkspace(workspaceId, (sessionId) => {
@@ -60,6 +97,7 @@ export function apply(ctx: ClientContext): void {
     })
   )
   ctx.effect(() => activity.dispose, 'workbench: session')
+  ctx.effect(() => startMonitor(snapshot => monitor.set(snapshot)), 'workbench: monitor')
   ctx.effect(() => ctx.locale.register('workbench', { zh, en, ja, es, fr, de, ru, pt }), 'workbench: copy')
   ctx.effect(() => ctx.slots.inject('workbench', () => ctx.slots.register({
     name: 'workbench',
@@ -68,7 +106,7 @@ export function apply(ctx: ClientContext): void {
       'workbench.composer': { kind: 'single', scope: 'session-maybe' },
     },
     inject: () => ({
-      hooks: { activity: activity.view },
+      hooks: { activity: activity.view, monitor: monitor },
       send: (text: string) => activity.send(text),
       sessionOf: () => activity.currentReference(),
       startSession: () => { workspace.startSession() },
@@ -79,9 +117,8 @@ export function apply(ctx: ClientContext): void {
         window.dispatchEvent(new CustomEvent('dsh:workbench-files', { detail: { open } }))
         if (!open) return
         const files = ctx.get('sidebarRight') as FilesSidebar | undefined
-        if (files === undefined) return
         queueMicrotask(() => {
-          try { files.openTab('files') }
+          try { files?.openTab('files') }
           catch { /* No official Session is on screen yet; the files host still mounts. */ }
         })
       },

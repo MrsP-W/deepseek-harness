@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkbenchShellProps, WorkbenchText } from '../src/client/WorkbenchShell.tsx'
 import type { ActivityFile, WorkbenchView } from '../src/client/activity.ts'
+import type { MonitorSnapshot } from '../src/client/monitor/model.ts'
 import { zh } from '../src/client/locales/workbench.ts'
 import { WorkbenchShell } from '../src/client/WorkbenchShell.tsx'
 
@@ -122,6 +123,109 @@ describe('WorkbenchShell', () => {
     getByRole('button', { name: zh['rail.chat'] }).click()
     expect(startSession).toHaveBeenCalledOnce()
     expect(openSessions).toHaveBeenCalledWith(true)
+  })
+
+  it('filters local Codex and Antigravity sessions inside the existing panes', () => {
+    const monitor: MonitorSnapshot = {
+      running: 1,
+      sessions: [
+        {
+          id: 'ag:1', agent: 'antigravity', surface: 'app', title: '给 aurora-sync 加上本机文件监听',
+          cwd: '/Projects/aurora-sync', startedAt: 1, status: 'running', prompt: '给 aurora-sync 加上本机文件监听',
+          steps: [
+            { id: 'read', at: 1, action: 'read', label: 'README.md', status: 'done' },
+            { id: 'cmd', at: 2, action: 'command', label: 'npm test', status: 'done' },
+            { id: 'edit', at: 3, action: 'edit', label: 'src/sync/manifest.ts', status: 'done' },
+            { id: 'write', at: 4, action: 'write', label: 'src/sync/watcher.ts', status: 'running' },
+          ],
+          files: [
+            { path: 'src/sync/watcher.ts', name: 'watcher.ts', content: 'export const watcher = true\n', fresh: true, action: 'write', at: 4 },
+            { path: '/', name: 'README', content: 'plain\n', fresh: false, action: 'read', at: 1 },
+          ],
+        },
+        {
+          id: 'ag:cli', agent: 'antigravity', surface: 'cli', title: '命令失败',
+          cwd: '', startedAt: 0, status: 'error', prompt: '', steps: [], files: [],
+        },
+        {
+          id: 'codex:exec', agent: 'codex', surface: 'exec', title: '命令行检查',
+          cwd: '', startedAt: 4, status: 'done', prompt: '', steps: [], files: [],
+        },
+        {
+          id: 'codex:1', agent: 'codex', surface: 'desktop', title: '为 aurora-sync 补充单元测试',
+          cwd: '/Projects/aurora-sync', startedAt: 2, status: 'done', prompt: '为 aurora-sync 补充单元测试',
+          steps: [], files: [],
+        },
+        {
+          id: 'codex:child', agent: 'codex', surface: 'subagent', title: '补齐 SyncManifest 类型定义',
+          cwd: '', startedAt: 3, status: 'running', prompt: '', parentId: 'codex:1', steps: [], files: [],
+        },
+      ],
+    }
+    installPointerCapture()
+    installMeasurement()
+    const view = render(
+      <WorkbenchShell
+        t={t}
+        useActivity={selector => selector(idle)}
+        useMonitor={selector => selector(monitor)}
+        sessionOf={() => undefined}
+        SessionProvider={SessionProvider}
+        renderSlot={renderSlot}
+      />,
+    )
+    expect(view.getByRole('heading', { name: zh['section.workflow'] })).toBeTruthy()
+    expect(view.getByText('实时 · 1 个进行中')).toBeTruthy()
+    expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain('反重力 · 应用')
+    expect(document.querySelector('[data-workbench-session="codex:child"]')?.textContent).toContain(zh['monitor.subagent'])
+    expect(document.querySelector('[data-workbench-session="codex:exec"]')?.textContent).toContain('Codex · CLI/exec')
+    expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain('反重力 · CLI')
+    expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain(zh['monitor.error'])
+    expect(document.querySelector('[data-workbench-trace="cmd"]')?.textContent).toContain(zh['monitor.command'])
+    expect(document.querySelector('[data-workbench-trace="edit"]')?.textContent).toContain(zh['monitor.edit'])
+    expect(document.querySelector('[data-workbench-trace="write"]')?.getAttribute('data-status')).toBe('running')
+    expect(document.querySelector('[data-monitor-count="running"]')?.textContent).toContain('2')
+    expect(document.querySelector('[data-monitor-count="done"]')?.textContent).toContain(zh['monitor.done'])
+    expect(document.querySelector('[data-monitor-count="error"]')?.textContent).toContain('1')
+    expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain('/Projects/aurora-sync')
+    const rail = view.getByRole('navigation', { name: zh['rail.label'] })
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.chat']}"]`) as Element)
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.workflow']}"]`) as Element)
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.files']}"]`) as Element)
+    fireEvent.click(rail.querySelector(`[aria-label="${zh['rail.settings']}"]`) as Element)
+    fireEvent.click(document.querySelector('[data-workbench-session="codex:child"]') as Element)
+    window.dispatchEvent(new CustomEvent('dsh:workbench-sessions', { detail: { open: true } }))
+    window.dispatchEvent(new CustomEvent('dsh:workbench-files', { detail: { open: false } }))
+    window.dispatchEvent(new CustomEvent('dsh:workbench-files', { detail: {} }))
+    window.dispatchEvent(new CustomEvent('dsh:workbench-sessions', { detail: {} }))
+    fireEvent.click(document.querySelector('[data-workbench-session="ag:1"]') as Element)
+    fireEvent.click(view.getByRole('button', { name: zh['monitor.codex'] }))
+    expect(document.querySelector('[data-workbench-session="ag:1"]')).toBeNull()
+    expect(document.querySelector('[data-workbench-session="codex:1"]')).not.toBeNull()
+    fireEvent.click(view.getByRole('button', { name: zh['monitor.all'] }))
+    fireEvent.click(document.querySelector('[data-workbench-open-file="src/sync/watcher.ts"]') as Element)
+    expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const watcher = true')
+    expect(document.querySelector('[data-workbench-composer] [data-official-composer]')).not.toBeNull()
+    expect(document.querySelectorAll('[data-window-drag]')).toHaveLength(2)
+  })
+
+  it('shows the empty copy when no local logs are listed', () => {
+    installPointerCapture()
+    installMeasurement()
+    const view = render(
+      <WorkbenchShell
+        t={t}
+        useActivity={selector => selector(idle)}
+        useMonitor={selector => selector({ running: 0, sessions: [] })}
+        sessionOf={() => undefined}
+        SessionProvider={SessionProvider}
+        renderSlot={renderSlot}
+      />,
+    )
+    expect(view.getByText(zh['monitor.empty'])).toBeTruthy()
+    expect(view.getByText('实时 · 0 个进行中')).toBeTruthy()
+    expect(document.querySelector('[data-monitor-count="running"]')?.textContent).toContain('0')
+    expect(document.querySelector('[data-monitor]')).not.toBeNull()
   })
 
   it('opens official workspace files from the rail', () => {
@@ -334,6 +438,10 @@ describe('WorkbenchShell', () => {
       path: 'src/lib/notes.md', crumbs: ['src', 'lib', 'notes.md'], badge: 'MD',
       lines: ['# Notes'], annotated: [1], cursorLine: 1, cursorColumn: 1,
     }
+    const bare: ActivityFile = {
+      path: 'README', crumbs: [], badge: '',
+      lines: ['hello'], annotated: [], cursorLine: 1, cursorColumn: 1,
+    }
     const { getByLabelText, getByRole } = mount({
       steps: [{ id: 'turn-1', title: '补上文件', status: 'done', time: '14:32' }],
       trace: [
@@ -341,7 +449,7 @@ describe('WorkbenchShell', () => {
         { id: 'w2', kind: 'write', action: 'write', path: beta.path, time: '14:32:09', status: 'done' },
         { id: 'todo', kind: 'todo_write', action: 'todo', time: '14:32:10', status: 'done' },
       ],
-      files: [alpha, beta],
+      files: [alpha, beta, bare],
       file: beta,
       sending: false,
       failed: false,
@@ -350,7 +458,8 @@ describe('WorkbenchShell', () => {
     expect(editor.getAttribute('data-workbench-editor-file')).toBe(beta.path)
     expect(editor.textContent).toContain('# Notes')
     expect(editor.textContent).not.toContain('export const amount = 1')
-    expect(getByRole('tablist', { name: zh['editor.tabs'] }).querySelectorAll('[role="tab"]')).toHaveLength(2)
+    expect(getByRole('tablist', { name: zh['editor.tabs'] }).querySelectorAll('[role="tab"]')).toHaveLength(3)
+    expect(getByRole('tab', { name: 'README' })).toBeTruthy()
     expect(getByRole('tab', { name: 'split.ts' }).getAttribute('aria-selected')).toBe('false')
     expect(getByRole('tab', { name: 'notes.md' }).getAttribute('aria-selected')).toBe('true')
     expect(document.querySelector('[data-workbench-trace="todo"] button')).toBeNull()

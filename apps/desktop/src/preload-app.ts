@@ -65,6 +65,23 @@ function createProductApi(): DshDesktopProductApi {
         return () => { ipcRenderer.off(DESKTOP_IPC.shortcutsChanged, handle) }
       },
     },
+    generationMonitor: {
+      files: () => ipcRenderer.invoke(DESKTOP_IPC.generationFiles) as Promise<
+        readonly { path: string; product: 'codex' | 'antigravity' | 'antigravity-cli' }[]
+      >,
+      read: (path: string, offset: number, max: number) => ipcRenderer.invoke(
+        DESKTOP_IPC.generationRead,
+        path,
+        offset,
+        max,
+      ) as Promise<{ text: string; size: number; bytes: number } | null>,
+      readText: (path: string, max: number) => ipcRenderer.invoke(DESKTOP_IPC.generationReadText, path, max) as Promise<string | null>,
+      subscribe(listener) {
+        const handle = (): void => { listener() }
+        ipcRenderer.on(DESKTOP_IPC.generationChanged, handle)
+        return () => { ipcRenderer.off(DESKTOP_IPC.generationChanged, handle) }
+      },
+    },
     updates: {
       channels: {
         get: () => ipcRenderer.invoke(DESKTOP_IPC.updatesChannelGet) as Promise<DesktopChannelState>,
