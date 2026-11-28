@@ -141,29 +141,11 @@ function clock(at: number): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-const HOUR_MS = 60 * 60 * 1000
-
-function elapsedText(at: number, now: number, t: WorkbenchText): string {
-  if (at <= 0) return t('monitor.elapsed.none')
-  const delta = now - at
-  if (delta < 0 || delta > 24 * HOUR_MS) return t('monitor.started', { time: clock(at) })
-  const minutes = Math.floor(delta / 60_000)
-  if (minutes < 1) return t('monitor.elapsed.seconds', { n: Math.max(1, Math.floor(delta / 1000)) })
-  if (minutes < 60) return t('monitor.elapsed.minutes', { n: minutes })
-  return t('monitor.elapsed.hours', { n: Math.floor(minutes / 60) })
-}
-
 function actionKey(action: MonitorSession['steps'][number]['action']): WorkbenchKey {
   if (action === 'read') return 'monitor.read'
   if (action === 'command') return 'monitor.command'
   if (action === 'write') return 'monitor.write'
   return 'monitor.edit'
-}
-
-function badgeKey(session: MonitorSession): WorkbenchKey {
-  if (session.agent === 'antigravity') return session.surface === 'cli' ? 'monitor.badge.ag.cli' : 'monitor.badge.ag.app'
-  if (session.surface === 'exec') return 'monitor.badge.codex.exec'
-  return 'monitor.badge.codex.desktop'
 }
 
 function monitorFile(file: MonitorSession['files'][number]): ActivityFile {
@@ -197,34 +179,113 @@ function openablePath(event: ActivityTrace, files: readonly ActivityFile[]): str
  * @returns The rail, workflow column, editor column, and the column separator.
  */
 
-/** One local Codex or Antigravity session inside the existing steps pane. */
+const MINUTE_MS = 60_000
+
+function pathTail(path: string): string {
+  const parts = path.split(/[/\\]/u).filter(part => part !== '')
+  return parts.at(-1) ?? ''
+}
+
+function isLogName(name: string): boolean {
+  return /\.jsonl$/iu.test(name) || /^rollout-/iu.test(name)
+}
+
+/** Project folder, else a human title. Log filenames are never shown as the name. */
+function displayName(session: MonitorSession): string {
+  const folder = pathTail(session.cwd)
+  if (folder !== '' && !isLogName(folder)) return folder
+  if (session.title !== '' && !isLogName(session.title)) return session.title
+  const head = session.prompt.replace(/\n[\s\S]*/u, '').trim()
+  if (head !== '' && !isLogName(head)) return head.slice(0, 48)
+  return session.agent === 'codex' ? 'Codex' : 'Antigravity'
+}
+
+type SessionLane = 'running' | 'waiting' | 'idle' | 'expired'
+
+function laneOf(session: MonitorSession, now: number): SessionLane {
+  const latest = session.steps.at(-1)?.at ?? session.startedAt
+  const age = now - latest
+  if (session.status === 'running') {
+    if (session.steps.some(step => step.status === 'running') || (age >= 0 && age < 3 * MINUTE_MS)) return 'running'
+    return 'waiting'
+  }
+  if (session.status === 'error' && age >= 0 && age < 15 * MINUTE_MS) return 'waiting'
+  if (age > 60 * MINUTE_MS) return 'expired'
+  return 'idle'
+}
+
+function laneKey(lane: SessionLane): WorkbenchKey {
+  if (lane === 'running') return 'monitor.lane.running'
+  if (lane === 'waiting') return 'monitor.lane.waiting'
+  if (lane === 'idle') return 'monitor.lane.idle'
+  return 'monitor.lane.expired'
+}
+
+function originKey(surface: MonitorSession['surface']): WorkbenchKey {
+  if (surface === 'exec' || surface === 'cli') return 'monitor.origin.exec'
+  if (surface === 'app') return 'monitor.origin.ide'
+  if (surface === 'subagent') return 'monitor.origin.subagent'
+  return 'monitor.origin.desktop'
+}
+
+function elapsedFigure(at: number, now: number): { clock: string; minutes: number } {
+  const delta = Math.max(0, now - Math.max(0, at))
+  const minutes = Math.floor(delta / MINUTE_MS)
+  const seconds = Math.floor((delta % MINUTE_MS) / 1000)
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60)
+    return { clock: `${hours}h ${minutes % 60}m`, minutes }
+  }
+  return { clock: `${minutes}m ${String(seconds).padStart(2, '0')}s`, minutes }
+}
+
+function sourceLabel(sessions: readonly MonitorSession[], t: WorkbenchText): string {
+  const codex = sessions.some(session => session.agent === 'codex')
+  const antigravity = sessions.some(session => session.agent === 'antigravity')
+  if (codex && antigravity) return t('monitor.sourceJoin', { a: t('monitor.codex'), b: t('monitor.ag') })
+  if (codex) return t('monitor.codex')
+  if (antigravity) return t('monitor.ag')
+  return ''
+}
+
+function latestAt(sessions: readonly MonitorSession[], now: number): number {
+  let latest = 0
+  for (const session of sessions) {
+    const at = Math.max(session.startedAt, session.steps.at(-1)?.at ?? 0, ...session.files.map(file => file.at))
+    if (at > latest && at <= now) latest = at
+  }
+  return latest
+}
+
+/** One local Codex or Antigravity session inside the session list. */
 function SessionRow({
-  session, selected, nested = false, t, onSelect,
+  session, selected, nested = false, now, t, onSelect,
 }: {
   session: MonitorSession
   selected: boolean
   nested?: boolean
+  now: number
   t: WorkbenchText
   onSelect: () => void
 }) {
+  const lane = laneOf(session, now)
+  const elapsed = elapsedFigure(session.startedAt, now)
   return (
     <button
       type="button"
       className={[css.session, selected ? css.sessionOn : '', nested ? css.sessionNested : ''].filter(part => part !== '').join(' ')}
       data-workbench-session={session.id}
       data-status={session.status}
+      data-lane={lane}
       aria-current={selected ? 'true' : undefined}
       onClick={onSelect}
     >
-      {nested && <span className={css.sessionChild}>{t('monitor.subagent')}</span>}
-      <span className={session.agent === 'codex' ? `${css.sessionBadge} ${css.badgeCodex}` : `${css.sessionBadge} ${css.badgeAg}`}>
-        {t(badgeKey(session))}
-      </span>
-      <span className={css.sessionTitle}>{session.title}</span>
-      {session.cwd !== '' && <span className={css.sessionCwd}>{session.cwd}</span>}
-      <span className={css.sessionStatus}>
-        {t(session.status === 'running' ? 'monitor.running' : session.status === 'error' ? 'monitor.error' : 'monitor.done')}
-      </span>
+      <span className={css.laneDot} data-lane={lane} />
+      <span className={css.sessionTitle}>{displayName(session)}</span>
+      <span className={css.sessionMeta}>{t(session.agent === 'codex' ? 'monitor.codex' : 'monitor.ag')}</span>
+      <span className={css.sessionMeta}>{t(originKey(session.surface))}</span>
+      <span className={css.sessionMeta}>{t(laneKey(lane))}</span>
+      <span className={css.sessionDuration}>{elapsed.clock}</span>
     </button>
   )
 }
@@ -244,27 +305,39 @@ function PaneToggle({ open, label, onToggle }: { open: boolean; label: string; o
 }
 
 function MonitorBoard({
-  t, sessions, selected, filter, page, files, file, now, onFilter, onSelect, onOpenFile,
+  t, sessions, catalog, selected, filter, page, viewMode, files, file, now,
+  onFilter, onView, onSelect, onOpenFile,
 }: {
   t: WorkbenchText
   sessions: readonly MonitorSession[]
+  catalog: readonly MonitorSession[]
   selected: MonitorSession | undefined
   filter: 'all' | 'codex' | 'antigravity'
   page: 'overview' | 'sources'
+  viewMode: 'list' | 'repo' | 'board'
   files: readonly ActivityFile[]
   file: ActivityFile | null
   now: number
   onFilter: (next: 'all' | 'codex' | 'antigravity') => void
+  onView: (next: 'list' | 'repo' | 'board') => void
   onSelect: (id: string) => void
   onOpenFile: (path: string) => void
 }) {
   const tops = sessions.filter(session => session.parentId === undefined
     || !sessions.some(parent => parent.id === session.parentId))
   const current = selected?.steps.at(-1)
-  const tally = {
-    running: sessions.filter(item => item.status === 'running').length,
-    done: sessions.filter(item => item.status === 'done').length,
-    error: sessions.filter(item => item.status === 'error').length,
+  const catalogTops = catalog.filter(session => session.parentId === undefined
+    || !catalog.some(parent => parent.id === session.parentId))
+  const byLane = (lane: SessionLane) => catalogTops.filter(session => laneOf(session, now) === lane)
+  const runningRows = byLane('running')
+  const waitingRows = byLane('waiting')
+  const idleRows = byLane('idle')
+  const openCount = catalogTops.filter(session => session.status !== 'done').length
+  const doneCount = catalogTops.filter(session => session.status === 'done').length
+  const longest = (rows: readonly MonitorSession[]) => {
+    let minutes = 0
+    for (const row of rows) minutes = Math.max(minutes, elapsedFigure(row.startedAt, now).minutes)
+    return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`
   }
   if (page === 'sources') {
     return (
@@ -281,51 +354,88 @@ function MonitorBoard({
   return (
     <div className={css.board} data-monitor-region="overview">
       <article className={css.highlight} data-monitor-region="highlight">
-        <p className={css.cardLabel}>{t('monitor.current')}</p>
-        <div className={css.counts}>
-          {([
-            ['running', tally.running, 'monitor.running'],
-            ['done', tally.done, 'monitor.done'],
-            ['error', tally.error, 'monitor.error'],
-          ] as const).map(([status, count, key]) => (
-            <span key={status} className={css.count} data-status={status} data-monitor-count={status}>
-              <span className={css.countValue}>{count}</span>
-              <span className={css.countLabel}>{t(key)}</span>
-            </span>
-          ))}
-        </div>
         {selected === undefined ? <p className={css.empty}>{t('monitor.empty')}</p> : (
           <>
-            <div className={css.highlightTitle}>
-              <span className={selected.agent === 'codex' ? `${css.sessionBadge} ${css.badgeCodex}` : `${css.sessionBadge} ${css.badgeAg}`}>
-                {t(badgeKey(selected))}
-              </span>
-              <span className={css.sessionTitle}>{selected.title}</span>
-              <span className={css.sessionStatus} data-status={selected.status}>
-                {t(selected.status === 'running' ? 'monitor.running' : selected.status === 'error' ? 'monitor.error' : 'monitor.done')}
-              </span>
+            <p className={css.eyebrow}>
+              <span className={css.liveDot} data-status={selected.status} />
+              {t('monitor.currentRun', { status: t(laneKey(laneOf(selected, now))) })}
+            </p>
+            <h3 className={css.projectTitle}>{displayName(selected)}</h3>
+            <p className={css.projectSub}>
+              <strong>{selected.steps.some(step => step.status === 'running' && step.action === 'write')
+                || selected.steps.some(step => step.status === 'running' && step.action === 'edit')
+                ? t('monitor.writing')
+                : t(laneKey(laneOf(selected, now)))}</strong>
+              {' · '}
+              {t(selected.agent === 'codex' ? 'monitor.codex' : 'monitor.ag')}
+              {' · '}
+              {t(originKey(selected.surface))}
+            </p>
+            <div className={css.nowBox}>
+              <p className={css.nowLabel}>{t('monitor.step')}</p>
+              <p className={css.nowCmd}>
+                {current === undefined ? t('monitor.elapsed.none') : `${t(actionKey(current.action))}  ${current.label}`}
+              </p>
+              {selected.prompt !== '' && <p className={css.nowDesc}>{selected.prompt}</p>}
             </div>
-            <dl className={css.facts}>
-              <div>
-                <dt>{t('monitor.step')}</dt>
-                <dd>{current?.label ?? t('monitor.elapsed.none')}</dd>
+            <div className={css.metaRow}>
+              <div className={css.fileBars}>
+                <p className={css.nowLabel}>{t('monitor.filesRun')}</p>
+                {selected.files.map((item) => {
+                  const lines = item.content === '' ? 0 : item.content.split('\n').filter(line => line !== '').length
+                  const widest = Math.max(1, ...selected.files.map(entry => (
+                    entry.content === '' ? 0 : entry.content.split('\n').filter(line => line !== '').length
+                  )))
+                  return (
+                    <button
+                      key={item.path}
+                      type="button"
+                      className={css.fileBar}
+                      data-workbench-open-file={item.path}
+                      onClick={() => onOpenFile(item.path)}
+                    >
+                      <span className={css.fileBarName}>{item.path}</span>
+                      <span className={css.barTrack}>
+                        <i className={item.fresh ? css.barHot : css.barFill} style={{ width: `${Math.round((lines / widest) * 100)}%` }} />
+                      </span>
+                      <span className={css.fileBarCount}>{lines > 0 ? `+${lines}` : t('monitor.elapsed.none')}</span>
+                    </button>
+                  )
+                })}
+                <p className={css.readonly}>{t('monitor.readonly')}</p>
               </div>
-              <div>
-                <dt>{t('monitor.filesChanged')}</dt>
-                <dd>{t('monitor.filesCount', { count: selected.files.length })}</dd>
+              <div className={css.elapsed}>
+                <p className={css.elapsedFigure}>{elapsedFigure(selected.startedAt, now).clock}</p>
+                <p className={css.elapsedLabel}>{t('monitor.elapsedOngoing', { n: elapsedFigure(selected.startedAt, now).minutes })}</p>
               </div>
-              <div>
-                <dt>{t('monitor.elapsed')}</dt>
-                <dd>{elapsedText(selected.startedAt, now, t)}</dd>
-              </div>
-            </dl>
+            </div>
           </>
         )}
+        <div className={css.stats}>
+          <div data-monitor-count="running">
+            <p className={css.statValue}>{runningRows.length} <small>{t('monitor.lane.running')}</small></p>
+            <p className={css.statHint}>{t('monitor.stat.longest', { time: longest(runningRows) })}</p>
+          </div>
+          <div data-monitor-count="idle">
+            <p className={css.statValue}>{idleRows.length} <small>{t('monitor.lane.idle')}</small></p>
+            <p className={css.statHint}>{t('monitor.stat.longest', { time: longest(idleRows) })}</p>
+          </div>
+          <div data-monitor-count="waiting">
+            <p className={css.statValue}>{waitingRows.length} <small>{t('monitor.lane.waiting')}</small></p>
+            <p className={css.statHint}>{t('monitor.stat.waitHint')}</p>
+          </div>
+          <div data-monitor-count="sessions">
+            <p className={css.statValue}>{catalogTops.length} <small>{t('monitor.stat.sessions')}</small></p>
+            <p className={css.statHint}>{t('monitor.stat.openDone', { open: openCount, done: doneCount })}</p>
+          </div>
+        </div>
       </article>
       <article className={css.outputCard} data-monitor-region="output" aria-label={t('editor.label')}>
         <div className={css.outputHead}>
-          <p className={css.cardLabel}>{file?.path ?? t('monitor.output')}</p>
-          {file !== null && file.annotated.length > 0 && <span className={css.streaming}>{t('monitor.streaming')}</span>}
+          <h3 className={css.cardHeading}>{t('monitor.output')}</h3>
+          {file !== null && file.annotated.length > 0 && (
+            <span className={css.streaming}>{t('monitor.streaming')}</span>
+          )}
         </div>
         {files.length > 0 && (
           <div className={css.tabs} role="tablist" aria-label={t('editor.tabs')}>
@@ -352,7 +462,23 @@ function MonitorBoard({
           </pre>
         )}
       </article>
-      <section className={css.listCard} data-monitor-region="sessions">
+      <section className={css.listCard} data-monitor-region="sessions" data-view={viewMode}>
+        <div className={css.cardHead}>
+          <h3 className={css.cardHeading}>{t('monitor.sessionHead', { count: tops.length })}</h3>
+          <div className={css.viewSwitch} role="tablist" aria-label={t('monitor.sessionHead', { count: tops.length })}>
+            {(['list', 'repo', 'board'] as const).map(item => (
+              <button
+                key={item}
+                type="button"
+                className={css.viewButton}
+                aria-pressed={viewMode === item}
+                onClick={() => onView(item)}
+              >
+                {t(item === 'list' ? 'monitor.view.list' : item === 'repo' ? 'monitor.view.repo' : 'monitor.view.board')}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className={css.filter} role="tablist" aria-label={t('monitor.filter')}>
           {(['all', 'codex', 'antigravity'] as const).map(item => (
             <button
@@ -366,56 +492,109 @@ function MonitorBoard({
             </button>
           ))}
         </div>
-        {sessions.length === 0 ? <p className={css.empty}>{t('monitor.empty')}</p> : (
-          <ul className={css.sessions}>
-            {tops.map(session => (
-              <li key={session.id}>
-                <SessionRow session={session} selected={selected?.id === session.id} t={t} onSelect={() => onSelect(session.id)} />
-                {sessions.filter(child => child.parentId === session.id).map(child => (
+        {sessions.length === 0 ? <p className={css.empty}>{t('monitor.empty')}</p> : viewMode === 'board' ? (
+          <div className={css.boardColumns}>
+            {(['running', 'waiting', 'idle', 'expired'] as const).map(lane => (
+              <div key={lane}>
+                <p className={css.groupLabel}>{t(laneKey(lane))}</p>
+                {tops.filter(session => laneOf(session, now) === lane).map(session => (
                   <SessionRow
-                    key={child.id}
-                    session={child}
-                    selected={selected?.id === child.id}
-                    nested
+                    key={session.id}
+                    session={session}
+                    selected={selected?.id === session.id}
+                    now={now}
                     t={t}
-                    onSelect={() => onSelect(child.id)}
+                    onSelect={() => onSelect(session.id)}
                   />
                 ))}
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
+        ) : (
+          <div className={css.sessionScroll}>
+            {(viewMode === 'list'
+              ? (['running', 'waiting', 'idle', 'expired'] as const)
+                .map(lane => ({
+                  key: lane,
+                  label: `${t(laneKey(lane))} ${tops.filter(session => laneOf(session, now) === lane).length}`,
+                  rows: tops.filter(session => laneOf(session, now) === lane),
+                }))
+              : [...new Set(tops.map(displayName))]
+                .map(name => ({ key: name, label: name, rows: tops.filter(session => displayName(session) === name) })))
+              .filter(group => group.rows.length > 0)
+              .map(group => (
+                <div key={group.key}>
+                  <p className={css.groupLabel}>{group.label}</p>
+                  <ul className={css.sessions}>
+                    {group.rows.map(session => (
+                      <li key={session.id}>
+                        <SessionRow
+                          session={session}
+                          selected={selected?.id === session.id}
+                          now={now}
+                          t={t}
+                          onSelect={() => onSelect(session.id)}
+                        />
+                        {viewMode === 'list' && sessions.filter(child => child.parentId === session.id).map(child => (
+                          <SessionRow
+                            key={child.id}
+                            session={child}
+                            selected={selected?.id === child.id}
+                            nested
+                            now={now}
+                            t={t}
+                            onSelect={() => onSelect(child.id)}
+                          />
+                        ))}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+          </div>
         )}
       </section>
       <section className={css.eventCard} data-monitor-region="events">
-        <p className={css.cardLabel}>{t('monitor.events')}</p>
-        {selected !== undefined && selected.prompt !== '' && (
-          <p className={css.prompt} data-workbench-prompt="">{selected.prompt}</p>
-        )}
+        <div className={css.cardHead}>
+          <h3 className={css.cardHeading}>{t('monitor.events')}</h3>
+          <p className={css.cardHint}>{t('monitor.eventsSince', {
+            time: clock(sessions.flatMap(session => session.steps.map(step => step.at)).sort((left, right) => left - right)[0] ?? now),
+          })}</p>
+        </div>
         <ol className={css.trace}>
-          {(selected?.steps ?? []).map((step) => {
-            const openPath = step.action === 'write' || step.action === 'edit' ? step.label : undefined
-            const row = (
-              <>
-                <span className={css.kind}>{t(actionKey(step.action))}</span>
-                <span className={css.traceBody}>{step.label}</span>
-                <time className={css.traceTime}>{clock(step.at)}</time>
-              </>
-            )
-            return (
-              <li
-                key={step.id}
-                className={step.status === 'running' ? `${css.traceRow} ${css.traceLive}` : css.traceRow}
-                data-workbench-trace={step.id}
-                data-status={step.status}
-              >
-                {openPath === undefined ? row : (
-                  <button type="button" className={css.traceOpen} data-workbench-open-file={openPath} onClick={() => onOpenFile(openPath)}>
-                    {row}
-                  </button>
-                )}
-              </li>
-            )
-          })}
+          {sessions.flatMap(session => session.steps.map(step => ({ session, step })))
+            .sort((left, right) => right.step.at - left.step.at)
+            .slice(0, 24)
+            .map(({ session, step }) => {
+              const openPath = step.action === 'write' || step.action === 'edit' ? step.label : undefined
+              const row = (
+                <>
+                  <time className={css.traceTime}>{clock(step.at)}</time>
+                  <span className={css.sessionTitle}>{displayName(session)}</span>
+                  <span className={css.kind}>{t(actionKey(step.action))}</span>
+                  <span className={css.traceBody}>{step.label}</span>
+                </>
+              )
+              return (
+                <li
+                  key={`${session.id}:${step.id}`}
+                  className={step.status === 'running' ? `${css.traceRow} ${css.traceLive}` : css.traceRow}
+                  data-workbench-trace={step.id}
+                  data-status={step.status}
+                >
+                  {openPath === undefined ? row : (
+                    <button
+                      type="button"
+                      className={css.traceOpen}
+                      data-workbench-open-file={openPath}
+                      onClick={() => onOpenFile(openPath)}
+                    >
+                      {row}
+                    </button>
+                  )}
+                </li>
+              )
+            })}
         </ol>
       </section>
     </div>
@@ -441,6 +620,7 @@ export function WorkbenchShell({
   const [query, setQuery] = useState('')
   const [page, setPage] = useState<'overview' | 'sources'>('overview')
   const [night, setNight] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'repo' | 'board'>('list')
   const activity = useActivity(view => view)
   const monitor = useMonitor?.(view => view)
   const monitorMode = useMonitor !== undefined
@@ -549,23 +729,30 @@ export function WorkbenchShell({
         <div className={css.railGroup}>
           {monitor !== undefined && (
             <>
+              <span className={css.mark}>{t('monitor.mark')}</span>
               <button
                 type="button"
-                className={css.railButton}
+                className={css.navItem}
                 aria-label={t('monitor.overview')}
                 aria-current={page === 'overview' ? 'page' : undefined}
                 onClick={() => setPage('overview')}
               >
                 <IconLayersOutlineMedium size={18} />
+                <span>{t('monitor.overview')}</span>
               </button>
               <button
                 type="button"
-                className={css.railButton}
+                className={css.navItem}
                 aria-label={t('monitor.sources')}
                 aria-current={page === 'sources' ? 'page' : undefined}
                 onClick={() => setPage('sources')}
               >
                 <IconFolderCloseMedium size={18} />
+                <span>{t('monitor.sources')}</span>
+              </button>
+              <button type="button" className={css.navItem} aria-label={t('rail.settings')} onClick={showSettings}>
+                <IconSettingsOutlineMedium size={18} />
+                <span>{t('rail.settings')}</span>
               </button>
             </>
           )}
@@ -599,9 +786,11 @@ export function WorkbenchShell({
             )
           })}
         </div>
-        <button type="button" className={`${css.railButton} ${css.railSettings}`} aria-label={t('rail.settings')} onClick={showSettings}>
-          <IconSettingsOutlineMedium size={18} />
-        </button>
+        {monitor === undefined && (
+          <button type="button" className={`${css.railButton} ${css.railSettings}`} aria-label={t('rail.settings')} onClick={showSettings}>
+            <IconSettingsOutlineMedium size={18} />
+          </button>
+        )}
       </nav>
       <section className={css.workflow} aria-label={t('section.workflow')}>
         <header className={`${css.workflowHead} ${css.paneTop}`} data-window-drag>
@@ -609,8 +798,13 @@ export function WorkbenchShell({
           <h2 className={css.topTitle}>{monitor !== undefined ? t('monitor.title') : t('section.workflow')}</h2>
           {monitor !== undefined && (
             <>
-              <span className={css.watching}>{t('monitor.watching')}</span>
-              <span className={css.liveCount}>{t('monitor.live', { count: monitor.running })}</span>
+              <span className={css.watching}>
+                {t('monitor.watchingLine', { count: monitor.sessions.length, sources: sourceLabel(monitor.sessions, t) })}
+                {' '}
+                <span className={css.checked}>{t('monitor.updated', {
+                  n: Math.max(0, Math.floor((Date.now() - latestAt(monitor.sessions, Date.now())) / 1000)),
+                })}</span>
+              </span>
               <label className={css.search}>
                 <IconSearchOutlineMedium size={16} />
                 <input
@@ -620,9 +814,14 @@ export function WorkbenchShell({
                   onChange={event => setQuery(event.target.value)}
                 />
               </label>
-              <button type="button" className={css.themeButton} aria-pressed={night} onClick={() => setNight(value => !value)}>
-                {t(night ? 'monitor.day' : 'monitor.night')}
-              </button>
+              <div className={css.themeSeg}>
+                <button type="button" className={css.themeButton} aria-pressed={night} onClick={() => setNight(true)}>
+                  {t('monitor.night')}
+                </button>
+                <button type="button" className={css.themeButton} aria-pressed={!night} onClick={() => setNight(false)}>
+                  {t('monitor.day')}
+                </button>
+              </div>
             </>
           )}
         </header>
@@ -630,13 +829,16 @@ export function WorkbenchShell({
           <MonitorBoard
             t={t}
             sessions={visibleSessions}
+            catalog={monitor.sessions}
             selected={selectedMonitor}
             filter={filter}
             page={page}
+            viewMode={viewMode}
             files={monitorFiles}
             file={file}
             now={Date.now()}
             onFilter={setFilter}
+            onView={setViewMode}
             onSelect={(id) => { setMonitorId(id); setSelectedPath(undefined) }}
             onOpenFile={setSelectedPath}
           />

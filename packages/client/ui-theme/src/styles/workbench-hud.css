@@ -30,8 +30,11 @@
   --dsh-mon-live-line: rgb(183, 228, 194);
   --dsh-mon-green: rgb(36, 138, 61);
   --dsh-mon-dot: rgb(52, 199, 89);
-  --dsh-mon-ground: rgb(244, 241, 234);
-  --dsh-mon-card: rgb(255, 252, 248);
+  --dsh-mon-ground: rgb(243, 242, 239);
+  --dsh-mon-card: rgb(251, 250, 247);
+  --dsh-mon-accent: rgb(192, 122, 34);
+  --dsh-mon-bar: rgb(109, 142, 174);
+  --dsh-mon-inset: rgb(244, 242, 238);
   --dsh-mon-card-on: rgb(236, 244, 252);
   --dsh-mon-error-fg: rgb(164, 56, 42);
   --dsh-mon-error-bg: rgb(252, 236, 232);

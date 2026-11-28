@@ -131,7 +131,7 @@ describe('WorkbenchShell', () => {
       sessions: [
         {
           id: 'ag:1', agent: 'antigravity', surface: 'app', title: '给 aurora-sync 加上本机文件监听',
-          cwd: '/Projects/aurora-sync', startedAt: Date.now() - 3_000, status: 'running', prompt: '给 aurora-sync 加上本机文件监听',
+          cwd: '/Projects/aurora-sync', startedAt: Date.now() - 2 * 60 * 60 * 1000, status: 'running', prompt: '给 aurora-sync 加上本机文件监听',
           steps: [
             { id: 'read', at: 1, action: 'read', label: 'README.md', status: 'done' },
             { id: 'cmd', at: Date.now() - 5_000, action: 'command', label: 'npm test', status: 'done' },
@@ -142,11 +142,12 @@ describe('WorkbenchShell', () => {
           files: [
             { path: 'src/sync/watcher.ts', name: 'watcher.ts', content: 'export const watcher = true\n', fresh: true, action: 'write', at: 4 },
             { path: '/', name: 'README', content: 'plain\n', fresh: false, action: 'write', at: 1 },
+            { path: 'empty.ts', name: 'empty.ts', content: '', fresh: false, action: 'edit', at: 1 },
           ],
         },
         {
-          id: 'ag:cli', agent: 'antigravity', surface: 'cli', title: '命令失败',
-          cwd: '', startedAt: 0, status: 'error', prompt: '', steps: [], files: [],
+          id: 'ag:cli', agent: 'antigravity', surface: 'cli', title: 'transcript_full.jsonl',
+          cwd: '', startedAt: Date.now() - 60_000, status: 'error', prompt: '', steps: [], files: [],
         },
         {
           id: 'codex:exec', agent: 'codex', surface: 'exec', title: '命令行检查',
@@ -155,15 +156,15 @@ describe('WorkbenchShell', () => {
         {
           id: 'codex:1', agent: 'codex', surface: 'desktop', title: '为 aurora-sync 补充单元测试',
           cwd: '/Projects/aurora-sync', startedAt: Date.now() - 5 * 60 * 1000, status: 'done', prompt: '为 aurora-sync 补充单元测试',
-          steps: [], files: [],
+          steps: [{ id: 'ed', at: Date.now(), action: 'edit', label: 'a.ts', status: 'running' }], files: [],
         },
         {
-          id: 'codex:soon', agent: 'codex', surface: 'desktop', title: '即将开始',
-          cwd: '', startedAt: Date.now() + 10_000, status: 'done', prompt: '', steps: [], files: [],
+          id: 'codex:soon', agent: 'codex', surface: 'desktop', title: 'rollout-2026.jsonl',
+          cwd: '', startedAt: Date.now() + 10_000, status: 'done', prompt: 'notes.jsonl', steps: [], files: [],
         },
         {
-          id: 'codex:child', agent: 'codex', surface: 'subagent', title: '补齐 SyncManifest 类型定义',
-          cwd: '', startedAt: 3, status: 'running', prompt: '', parentId: 'codex:1', steps: [], files: [],
+          id: 'codex:child', agent: 'codex', surface: 'subagent', title: 'transcript_full.jsonl',
+          cwd: '', startedAt: 3, status: 'running', prompt: '补齐类型\n更多', parentId: 'codex:1', steps: [], files: [],
         },
       ],
     }
@@ -180,24 +181,30 @@ describe('WorkbenchShell', () => {
       />,
     )
     expect(view.getByRole('heading', { name: zh['monitor.title'] })).toBeTruthy()
-    expect(view.getByText('实时 · 1 个进行中')).toBeTruthy()
-    expect(view.getByText(zh['monitor.watching'])).toBeTruthy()
+    expect(view.getByText(zh['monitor.mark'])).toBeTruthy()
+    expect(view.getByText(/正在监控 6 个会话/u)).toBeTruthy()
+    expect(view.getByText(zh['monitor.readonly'])).toBeTruthy()
+    expect(view.getAllByText('aurora-sync').length).toBeGreaterThan(0)
     expect(view.getByText(zh['monitor.streaming'])).toBeTruthy()
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const watcher = true')
     expect(document.querySelector('[data-monitor-region="highlight"]')).not.toBeNull()
     expect(document.querySelector('[data-monitor-region="events"]')).not.toBeNull()
-    expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain('反重力 · 应用')
-    expect(document.querySelector('[data-workbench-session="codex:child"]')?.textContent).toContain(zh['monitor.subagent'])
-    expect(document.querySelector('[data-workbench-session="codex:exec"]')?.textContent).toContain('Codex · CLI/exec')
-    expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain('反重力 · CLI')
-    expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain(zh['monitor.error'])
+    expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain('aurora-sync')
+    expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain(zh['monitor.origin.ide'])
+    expect(document.querySelector('[data-workbench-session="codex:child"]')?.textContent).toContain(zh['monitor.origin.subagent'])
+    expect(document.querySelector('[data-workbench-session="codex:exec"]')?.textContent).toContain(zh['monitor.origin.exec'])
+    expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain('Antigravity')
+    expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).not.toContain('transcript_full.jsonl')
+    expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain(zh['monitor.lane.waiting'])
+    expect(document.querySelector('[data-workbench-session="codex:child"]')?.textContent).toContain('补齐类型')
     expect(document.querySelector('[data-workbench-trace="cmd"]')?.textContent).toContain(zh['monitor.command'])
     expect(document.querySelector('[data-workbench-trace="edit"]')?.textContent).toContain(zh['monitor.edit'])
     expect(document.querySelector('[data-workbench-trace="write"]')?.getAttribute('data-status')).toBe('running')
-    expect(document.querySelector('[data-monitor-count="running"]')?.textContent).toContain('2')
-    expect(document.querySelector('[data-monitor-count="done"]')?.textContent).toContain(zh['monitor.done'])
-    expect(document.querySelector('[data-monitor-count="error"]')?.textContent).toContain('1')
-    expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).toContain('/Projects/aurora-sync')
+    expect(document.querySelector('[data-monitor-count="running"]')?.textContent).toContain(zh['monitor.lane.running'])
+    expect(document.querySelector('[data-monitor-count="idle"]')?.textContent).toContain(zh['monitor.lane.idle'])
+    expect(document.querySelector('[data-monitor-count="waiting"]')?.textContent).toContain(zh['monitor.lane.waiting'])
+    expect(document.body.textContent).toContain('h ')
+    expect(document.querySelector('[data-workbench-session="ag:1"]')?.textContent).not.toContain('transcript_full.jsonl')
     const rail = view.getByRole('navigation', { name: zh['rail.label'] })
     fireEvent.click(rail.querySelector(`[aria-label="${zh['monitor.sources']}"]`) as Element)
     expect(view.getByText(zh['monitor.sourcesNote'])).toBeTruthy()
@@ -222,15 +229,56 @@ describe('WorkbenchShell', () => {
     fireEvent.click(view.getByRole('button', { name: zh['monitor.codex'] }))
     expect(document.querySelector('[data-workbench-session="ag:1"]')).toBeNull()
     expect(document.querySelector('[data-workbench-session="codex:1"]')).not.toBeNull()
+    fireEvent.click(view.getByRole('button', { name: zh['monitor.view.repo'] }))
+    fireEvent.click(view.getByRole('button', { name: zh['monitor.view.board'] }))
+    fireEvent.click(document.querySelector('[data-workbench-session="codex:exec"]') as Element)
+    fireEvent.click(view.getByRole('button', { name: zh['monitor.view.list'] }))
     fireEvent.click(view.getByRole('button', { name: zh['monitor.all'] }))
+    fireEvent.click(document.querySelector('[data-workbench-session="ag:1"]') as Element)
     fireEvent.click(view.getByRole('tab', { name: 'README' }))
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain('plain')
     expect(view.queryByText(zh['monitor.streaming'])).toBeNull()
     fireEvent.click(document.querySelector('[data-workbench-open-file="src/sync/watcher.ts"]') as Element)
+    fireEvent.click(document.querySelector('[data-workbench-trace="write"] button') as Element)
     expect(view.getByLabelText(zh['editor.label']).textContent).toContain('export const watcher = true')
     expect(view.getByText(zh['monitor.streaming'])).toBeTruthy()
     expect(document.querySelector('[data-workbench-composer] [data-official-composer]')).not.toBeNull()
     expect(document.querySelectorAll('[data-window-drag]')).toHaveLength(1)
+  })
+
+  it('names a single product in the watching line', () => {
+    installPointerCapture()
+    installMeasurement()
+    const only = (agent: 'codex' | 'antigravity'): MonitorSnapshot => ({
+      running: 0,
+      sessions: [{
+        id: agent, agent, surface: 'desktop', title: 'solo', cwd: '', startedAt: 1,
+        status: 'done', prompt: '', steps: [], files: [],
+      }],
+    })
+    const codex = render(
+      <WorkbenchShell
+        t={t}
+        useActivity={selector => selector(idle)}
+        useMonitor={selector => selector(only('codex'))}
+        sessionOf={() => undefined}
+        SessionProvider={SessionProvider}
+        renderSlot={renderSlot}
+      />,
+    )
+    expect(codex.getByText(/来自 Codex/u)).toBeTruthy()
+    codex.unmount()
+    const antigravity = render(
+      <WorkbenchShell
+        t={t}
+        useActivity={selector => selector(idle)}
+        useMonitor={selector => selector(only('antigravity'))}
+        sessionOf={() => undefined}
+        SessionProvider={SessionProvider}
+        renderSlot={renderSlot}
+      />,
+    )
+    expect(antigravity.getByText(/来自 反重力/u)).toBeTruthy()
   })
 
   it('shows the empty copy when no local logs are listed', () => {
@@ -247,7 +295,7 @@ describe('WorkbenchShell', () => {
       />,
     )
     expect(view.getAllByText(zh['monitor.empty']).length).toBeGreaterThan(0)
-    expect(view.getByText('实时 · 0 个进行中')).toBeTruthy()
+    expect(view.getByText(/正在监控 0 个会话/u)).toBeTruthy()
     expect(document.querySelector('[data-monitor-count="running"]')?.textContent).toContain('0')
     expect(document.querySelector('[data-monitor]')).not.toBeNull()
   })
