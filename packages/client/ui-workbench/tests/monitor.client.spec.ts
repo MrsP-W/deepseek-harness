@@ -235,6 +235,28 @@ describe('Codex and Antigravity folds', () => {
     ].join(''), NOW)
     expect(slugOnly.prompt).toBe('taskmarket-tsk-brk611an')
     expect(slugOnly.title).not.toBe('taskmarket-tsk-brk611an')
+    const wrapped = createDraft({ path: '/tmp/rollout-wrapped.jsonl', product: 'codex' })
+    ingestLines(wrapped, [
+      line({ type: 'session_meta', payload: { id: PARENT, cwd } }),
+      line({
+        type: 'event_msg',
+        payload: {
+          type: 'user_message',
+          message: '<USER_REQUEST>\nTSK-BRK611AN 已完成「发布者增长从哪来」双链对比主图、数据驱动结论句、专属分享卡\n</USER_REQUEST>',
+        },
+      }),
+    ].join(''), NOW)
+    expect(wrapped.title.startsWith('TSK-BRK611AN 已完成')).toBe(true)
+    expect(wrapped.title.length).toBeLessThanOrEqual(24)
+    expect(wrapped.title).not.toContain('USER_REQUEST')
+    expect(wrapped.title).not.toContain('专属分享卡')
+    expect(wrapped.prompt).toContain('专属分享卡')
+    const sentence = createDraft({ path: '/tmp/rollout-sentence.jsonl', product: 'codex' })
+    ingestLines(sentence, line({
+      type: 'event_msg',
+      payload: { type: 'user_message', message: '先改标题。后面还有很长的说明文字不要进名字' },
+    }), NOW)
+    expect(sentence.title).toBe('先改标题')
     const ag = createDraft({ path: '/brain/conv/.system_generated/logs/transcript_full.jsonl', product: 'antigravity' })
     ingestLines(ag, line({ source: 'USER_EXPLICIT', type: 'USER_INPUT', content: '给页面加周报' }), NOW)
     expect(ag.title).toBe('给页面加周报')

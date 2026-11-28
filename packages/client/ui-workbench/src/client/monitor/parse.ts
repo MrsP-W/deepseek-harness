@@ -215,15 +215,35 @@ function isContextDump(text: string): boolean {
   return false
 }
 
-/** First human line. Paths, log names, and the cwd slug are skipped. */
+/** How many characters of a conversation name the monitor shows. */
+export const CONVERSATION_TITLE_MAX = 24
+
+/**
+ * A short conversation name. Tags such as `<USER_REQUEST>` are removed.
+ * The first sentence is kept, then cut to {@link CONVERSATION_TITLE_MAX}.
+ * @param text - a title or user message, possibly wrapped in a tag.
+ * @returns the abbreviation, or empty when nothing human remains.
+ */
+export function abbreviateConversation(text: string): string {
+  const flat = text.replace(/<\/?[A-Za-z_][\w:-]*>/gu, ' ').replace(/\s+/gu, ' ').trim()
+  if (flat === '') return ''
+  const end = flat.search(/[。！？；]/u)
+  const clause = end > 0 ? flat.slice(0, end) : flat
+  if (clause.length <= CONVERSATION_TITLE_MAX) return clause
+  return clause.slice(0, CONVERSATION_TITLE_MAX)
+}
+
+/** First human line. Paths, log names, tags, and the cwd slug are skipped. */
 function titleFrom(text: string, cwd: string): string {
   const folder = fileName(cwd)
-  for (const raw of text.split('\n')) {
+  const stripped = text.replace(/<\/?[A-Za-z_][\w:-]*>/gu, '\n')
+  for (const raw of stripped.split('\n')) {
     const line = raw.trim()
     if (isLogFile(line)) continue
     if (isOnlyPath(line)) continue
     if (folder !== '' && line === folder) continue
-    if (line !== '') return line.slice(0, 80)
+    const title = abbreviateConversation(line)
+    if (title !== '') return title
   }
   return ''
 }

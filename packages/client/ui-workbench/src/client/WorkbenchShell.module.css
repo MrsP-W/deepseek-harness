@@ -1275,10 +1275,13 @@
 
 .projectTitle {
   margin: 8px 0 0;
+  overflow: hidden;
   font-size: 28px;
   line-height: 32px;
   font-weight: 500;
   letter-spacing: -0.03em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .eyebrow,
@@ -1342,7 +1345,13 @@
   text-overflow: ellipsis;
 }
 
-.nowDesc { margin-top: 4px; }
+.nowDesc {
+  display: -webkit-box;
+  margin-top: 4px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 
 .metaRow {
   display: flex;

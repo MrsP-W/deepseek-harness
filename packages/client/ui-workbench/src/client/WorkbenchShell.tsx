@@ -17,6 +17,7 @@ import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { ActivityFile, ActivityStep, ActivityTrace, WorkbenchView } from './activity.ts'
 import type { MonitorSession, MonitorSnapshot } from './monitor/model.ts'
+import { abbreviateConversation } from './monitor/parse.ts'
 import type { WorkbenchKey } from './locales/workbench.ts'
 import css from './WorkbenchShell.module.css'
 
@@ -194,18 +195,14 @@ function isOnlyPath(value: string): boolean {
   return value !== '' && !/\s/u.test(value) && (value.includes('/') || value.includes('\\'))
 }
 
-/** A display title. Paths, log filenames, and the working-directory slug are not titles. */
+/** A display title. Paths, log filenames, tags, and the working-directory slug are not titles. */
 function acceptedTitle(value: string, folder: string): string {
-  const trimmed = value.trim()
+  const trimmed = abbreviateConversation(value)
   if (trimmed === '' || isLogName(trimmed) || isOnlyPath(trimmed) || trimmed === folder) return ''
-  return trimmed.slice(0, 80)
+  return trimmed
 }
 
-/**
- * Conversation title, else the first human line of the prompt.
- * The project folder is used only when the log has neither.
- */
-function displayName(session: MonitorSession): string {
+function ownTitle(session: MonitorSession): string {
   const folder = pathTail(session.cwd)
   const titled = acceptedTitle(session.title, folder)
   if (titled !== '') return titled
@@ -213,6 +210,23 @@ function displayName(session: MonitorSession): string {
     const line = acceptedTitle(raw, folder)
     if (line !== '') return line
   }
+  return acceptedTitle(session.prompt, folder)
+}
+
+/**
+ * Short conversation name. A subagent with only a directory slug uses its parent's name.
+ * The project folder is used only when the log has neither.
+ * @param sessions - sibling sessions, used to inherit a parent title.
+ */
+function displayName(session: MonitorSession, sessions: readonly MonitorSession[] = []): string {
+  const own = ownTitle(session)
+  if (own !== '') return own
+  const parent = session.parentId === undefined ? undefined : sessions.find(item => item.id === session.parentId)
+  if (parent !== undefined) {
+    const inherited = ownTitle(parent)
+    if (inherited !== '') return inherited
+  }
+  const folder = pathTail(session.cwd)
   if (folder !== '' && !isLogName(folder)) return folder
   return session.agent === 'codex' ? 'Codex' : 'Antigravity'
 }
@@ -283,9 +297,10 @@ function latestAt(sessions: readonly MonitorSession[], now: number): number {
 
 /** One local Codex or Antigravity session inside the session list. */
 function SessionRow({
-  session, selected, nested = false, now, t, onSelect,
+  session, sessions, selected, nested = false, now, t, onSelect,
 }: {
   session: MonitorSession
+  sessions: readonly MonitorSession[]
   selected: boolean
   nested?: boolean
   now: number
@@ -305,7 +320,7 @@ function SessionRow({
       onClick={onSelect}
     >
       <span className={css.laneDot} data-lane={lane} />
-      <span className={css.sessionTitle}>{displayName(session)}</span>
+      <span className={css.sessionTitle}>{displayName(session, sessions)}</span>
       <span className={css.sessionMeta}>{t(session.agent === 'codex' ? 'monitor.codex' : 'monitor.ag')}</span>
       <span className={css.sessionMeta}>{t(originKey(session.surface))}</span>
       <span className={css.sessionMeta}>{t(laneKey(lane))}</span>
@@ -470,7 +485,9 @@ function MonitorBoard({
               <span className={css.liveDot} data-status={selected.status} />
               {t('monitor.currentRun', { status: t(laneKey(laneOf(selected, now))) })}
             </p>
-            <h3 className={css.projectTitle}>{displayName(selected)}</h3>
+            <h3 className={css.projectTitle} title={selected.prompt === '' ? undefined : selected.prompt}>
+              {displayName(selected, catalog)}
+            </h3>
             <p className={css.projectSub}>
               <strong>{selected.steps.some(step => step.status === 'running' && step.action === 'write')
                 || selected.steps.some(step => step.status === 'running' && step.action === 'edit')
@@ -599,6 +616,7 @@ function MonitorBoard({
                   <SessionRow
                     key={session.id}
                     session={session}
+                    sessions={catalog}
                     selected={selected?.id === session.id}
                     now={now}
                     t={t}
@@ -617,8 +635,8 @@ function MonitorBoard({
                   label: `${t(laneKey(lane))} ${tops.filter(session => laneOf(session, now) === lane).length}`,
                   rows: tops.filter(session => laneOf(session, now) === lane),
                 }))
-              : [...new Set(tops.map(displayName))]
-                .map(name => ({ key: name, label: name, rows: tops.filter(session => displayName(session) === name) })))
+              : [...new Set(tops.map(session => displayName(session, catalog)))]
+                .map(name => ({ key: name, label: name, rows: tops.filter(session => displayName(session, catalog) === name) })))
               .filter(group => group.rows.length > 0)
               .map(group => (
                 <div key={group.key}>
@@ -628,6 +646,7 @@ function MonitorBoard({
                       <li key={session.id}>
                         <SessionRow
                           session={session}
+                          sessions={catalog}
                           selected={selected?.id === session.id}
                           now={now}
                           t={t}
@@ -637,6 +656,7 @@ function MonitorBoard({
                           <SessionRow
                             key={child.id}
                             session={child}
+                            sessions={catalog}
                             selected={selected?.id === child.id}
                             nested
                             now={now}
@@ -668,7 +688,7 @@ function MonitorBoard({
               const row = (
                 <>
                   <time className={css.traceTime}>{clock(step.at)}</time>
-                  <span className={css.sessionTitle}>{displayName(session)}</span>
+                  <span className={css.sessionTitle}>{displayName(session, catalog)}</span>
                   <span className={css.kind}>{t(actionKey(step.action))}</span>
                   <span className={css.traceBody}>{labelName(step.label)}</span>
                 </>

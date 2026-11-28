@@ -6,6 +6,7 @@ import type { WorkbenchShellProps, WorkbenchText } from '../src/client/Workbench
 import type { ActivityFile, WorkbenchView } from '../src/client/activity.ts'
 import type { MonitorSnapshot } from '../src/client/monitor/model.ts'
 import { zh } from '../src/client/locales/workbench.ts'
+import { abbreviateConversation } from '../src/client/monitor/parse.ts'
 import { WorkbenchShell } from '../src/client/WorkbenchShell.tsx'
 
 const idle: WorkbenchView = {
@@ -191,6 +192,25 @@ describe('WorkbenchShell', () => {
           prompt: '/tmp/only.ts\n\nnotes.jsonl\ntaskmarket-tsk-brk611an\n给副业页面补上移动端预览',
           steps: [], files: [],
         },
+        {
+          id: 'codex:long', agent: 'codex', surface: 'exec', title: '<USER_REQUEST>',
+          cwd: '/outputs/taskmarket-tsk-brk611an', startedAt: Date.now() - 4_000, status: 'done',
+          prompt: '<USER_REQUEST>\nTSK-BRK611AN 已完成「发布者增长从哪来 (posterCohorts)」双链对比主图、数据驱动结论句、专属分享卡 (share-growth.png)\n</USER_REQUEST>',
+          steps: [{ id: 'long-step', at: 9, action: 'edit', label: 'share-growth.png', status: 'done' }],
+          files: [],
+        },
+        {
+          id: 'codex:childslug', agent: 'codex', surface: 'subagent', title: 'taskmarket-tsk-brk611an',
+          cwd: '/outputs/taskmarket-tsk-brk611an', startedAt: Date.now() - 3_000, status: 'done',
+          prompt: '', parentId: 'codex:long',
+          steps: [{ id: 'child-step', at: 8, action: 'command', label: 'exec', status: 'done' }],
+          files: [],
+        },
+        {
+          id: 'codex:orphan', agent: 'codex', surface: 'subagent', title: 'taskmarket-tsk-brk611an',
+          cwd: '/x/taskmarket-tsk-brk611an', startedAt: 2, status: 'done', prompt: '',
+          parentId: 'codex:bare', steps: [], files: [],
+        },
       ],
     }
     installPointerCapture()
@@ -207,7 +227,7 @@ describe('WorkbenchShell', () => {
     )
     expect(view.getByRole('heading', { name: zh['monitor.title'] })).toBeTruthy()
     expect(view.getByText(zh['monitor.mark'])).toBeTruthy()
-    expect(view.getByText(/正在监控 8 个会话/u)).toBeTruthy()
+    expect(view.getByText(/正在监控 11 个会话/u)).toBeTruthy()
     expect(view.getByText(zh['monitor.readonly'])).toBeTruthy()
     expect(view.getByRole('heading', { level: 3, name: '给 aurora-sync 加上本机文件监听' })).toBeTruthy()
     expect(view.getByText(zh['monitor.streaming'])).toBeTruthy()
@@ -227,7 +247,22 @@ describe('WorkbenchShell', () => {
     expect(document.querySelector('[data-workbench-session="codex:child"]')?.textContent).toContain(zh['monitor.origin.subagent'])
     expect(document.querySelector('[data-workbench-session="codex:exec"]')?.textContent).toContain(zh['monitor.origin.exec'])
     expect(document.querySelector('[data-workbench-session="codex:soon"]')?.textContent).toContain('taskmarket-tsk-brk611an')
+    const short = abbreviateConversation('TSK-BRK611AN 已完成「发布者增长从哪来 (posterCohorts)」双链对比主图、数据驱动结论句、专属分享卡')
+    expect(short.length).toBeLessThanOrEqual(24)
+    expect(document.querySelector('[data-workbench-session="codex:long"]')?.textContent).toContain(short)
+    expect(document.querySelector('[data-workbench-session="codex:long"]')?.textContent).not.toContain('<USER_REQUEST>')
+    expect(document.querySelector('[data-workbench-session="codex:long"]')?.textContent).not.toContain('专属分享卡')
+    expect(document.querySelector('[data-workbench-session="codex:childslug"]')?.textContent).toContain(short)
+    expect(document.querySelector('[data-workbench-session="codex:childslug"]')?.textContent).not.toContain('taskmarket-tsk-brk611an')
+    expect(document.querySelector('[data-workbench-trace="long-step"]')?.textContent).toContain(short)
+    expect(document.querySelector('[data-workbench-trace="child-step"]')?.textContent).toContain(short)
+    expect(document.querySelector('[data-workbench-trace="child-step"]')?.textContent).not.toContain('<USER_REQUEST>')
     expect(document.querySelector('[data-workbench-session="codex:named"]')?.textContent).toContain('给副业页面补上移动端预览')
+    fireEvent.click(document.querySelector('[data-workbench-session="codex:long"]') as Element)
+    const headline = view.getByRole('heading', { level: 3, name: short })
+    expect(headline.textContent).toBe(short)
+    expect(headline.getAttribute('title')).toContain('专属分享卡')
+    expect(headline.getAttribute('title')).not.toBe(short)
     expect(document.querySelector('[data-workbench-session="codex:named"]')?.textContent).not.toContain('taskmarket-tsk-brk611an')
     expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).toContain('Antigravity')
     expect(document.querySelector('[data-workbench-session="ag:cli"]')?.textContent).not.toContain('transcript_full.jsonl')
